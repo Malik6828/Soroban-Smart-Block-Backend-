@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import { realtimeHub } from '../realtime/eventHub';
 import { xdr } from '@stellar/stellar-sdk';
 import { prismaRead, prismaWrite, prismaWrite as prisma } from '../db';
 import { config } from '../config';
@@ -361,6 +362,12 @@ export async function processLedgerRange(
     });
     stopPersistLedgerTimer();
     indexerPipelineStageProcessedTotal.inc({ stage: 'persist', status: 'success' });
+    realtimeHub.publishLedger({
+      sequence: seq,
+      hash: ledgerMeta.hash,
+      closeTime: new Date(ledgerMeta.closeTime).toISOString(),
+      txCount: ledgerMeta.txCount,
+    });
   }
 
   // Complete Stage 1 (Fetch)
@@ -377,6 +384,15 @@ export async function processLedgerRange(
   const indexedContracts = new Set<string>();
 
   for (const event of events) {
+    realtimeHub.publishContractEvent({
+      contractId: event.contractId,
+      eventType: event.topics[0] ?? 'unknown',
+      topics: event.topics,
+      data: event.data,
+      ledgerSequence: event.ledgerSequence,
+      transactionHash: event.transactionHash,
+      pagingToken: event.pagingToken,
+    });
     const stopPersistContractTimer = indexerPipelineStageDuration.startTimer({ stage: 'persist' });
     const contract = await prismaWrite.contract.upsert({
       where: { address: event.contractId },
