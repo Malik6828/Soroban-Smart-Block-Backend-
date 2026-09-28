@@ -348,17 +348,18 @@ router.use('/freeze-incidents', freezeIncidentsRouter);
 import { provenanceRouter } from './provenance';
 router.use('/provenance', provenanceRouter);
 
-// ── Public dataset & bulk-download exports (ECO02 / #1013) ──────────────────
-import { publicDatasetsRouter } from './public-datasets';
-router.use('/datasets', publicDatasetsRouter);
+// ── Organizations & team management (PLT01 / #1022) ─────────────────────────
+import { organizationsRouter } from './organizations';
+router.use('/orgs', requireApiKey, organizationsRouter);
 
-// ── Community analytics query-template gallery (ECO04 / #1015) ──────────────
-import { queryTemplateGalleryRouter } from './query-template-gallery';
-router.use('/query-templates', requireApiKey, queryTemplateGalleryRouter);
+// ── Public developer tools & integrations directory (ECO10 / #1021) ─────────
+import { toolsDirectoryRouter } from './tools-directory';
+router.use('/tools-directory', toolsDirectoryRouter);
 
-// ── Data marketplace quota & revenue dashboard (ECO05 / #1016) ──────────────
-router.use('/data-market-usage', requireApiKey, dataMarketUsageRouter);
+// ── Reputation badges (ECO09 / #1020) ────────────────────────────────────────
+import { reputationBadgesRouter } from './reputation-badges';
+router.use('/reputation-badges', reputationBadgesRouter);
 
-// ── Versioned schema registry for decoded events (ECO06 / #1017) ────────────
-import { eventSchemaRegistryRouter } from './event-schema-registry';
-router.use('/event-schemas', eventSchemaRegistryRouter);
+// ── Analytics template SQL export (ECO07 / #1018) ────────────────────────────
+import { sqlExportRouter } from './sql-export';
+router.use('/analytics/sql-export', requireApiKey, sqlExportRouter);
