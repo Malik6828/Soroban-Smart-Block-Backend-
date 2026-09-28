@@ -29,6 +29,20 @@ export const httpErrorsTotal = new Counter({
   registers: [registry],
 });
 
+export const contractAbiSubmissionOperations = new Counter({
+  name: 'contract_abi_submission_operations_total',
+  help: 'Contract ABI submission workflow operations by operation and outcome',
+  labelNames: ['operation', 'outcome'],
+  registers: [registry],
+});
+
+export const contractAbiSubmissionValidationDuration = new Histogram({
+  name: 'contract_abi_submission_validation_duration_seconds',
+  help: 'Time to validate submitted ABI functions against indexed contract activity',
+  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
+  registers: [registry],
+});
+
 // ── 5xx Error Surge Alerting ─────────────────────────────────────────────────
 export const http5xxSurge = new Gauge({
   name: 'http_5xx_surge_ratio',

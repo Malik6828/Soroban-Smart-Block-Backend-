@@ -36,6 +36,13 @@ export interface FlagDefinition {
 
 export const FEATURE_FLAG_DEFINITIONS: FlagDefinition[] = [
   {
+    key: 'contractAbiSubmissions',
+    description:
+      'Community ABI submissions with admin moderation and publication into the contract registry.',
+    requiredTables: ['_contract_abi_submissions', '_contract_abi_submission_events'],
+    defaultEnabled: false,
+  },
+  {
     key: 'privacyWs',
     description:
       'Privacy WebSocket broadcaster (/ws/v1/privacy and /ws/v1/privacy/alerts); streams privacy-protocol transactions and anomaly alerts.',

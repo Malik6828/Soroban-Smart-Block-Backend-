@@ -34,6 +34,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:contract-abi": "npm run test:coverage && ts-node --transpile-only scripts/verify-contract-abi-coverage.ts",
     "test:ui": "vitest --ui",
     "bench": "vitest run src/benchmarks/",
     "bench:watch": "vitest watch src/benchmarks/",

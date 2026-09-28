@@ -20,6 +20,10 @@ import { i18nRouter } from './i18n';
 import { transactionRouter } from './transactions';
 import { eventRouter } from './events';
 import { contractRouter } from './contracts';
+import {
+	contractAbiSubmissionsAdminRouter,
+	contractAbiSubmissionsRouter,
+} from './contract-abi-submissions';
 import { walletRouter } from './wallets';
 import { tokenRouter } from './tokens';
 import { batchRouter } from './batch';
@@ -112,6 +116,7 @@ router.use('/freeze', adminAuth, freezeRouter);
 router.use('/i18n', i18nRouter);
 router.use('/transactions', transactionRouter);
 router.use('/events', eventRouter);
+router.use('/contracts/abi-submissions', contractAbiSubmissionsRouter);
 import { contractLicensesRouter } from './contract-licenses';
 router.use('/contracts/licenses', contractLicensesRouter);
 router.use('/contracts', contractRouter);
@@ -161,6 +166,7 @@ router.use('/exports', exportsRouter);
 // even tighter limit because mutations there directly affect API throttling.
 router.use('/admin', adminRateLimit);
 router.use('/admin/rate-limits', adminRateLimitsOverrideRateLimit, rateLimitAdminRouter);
+router.use('/admin/contract-abi-submissions', contractAbiSubmissionsAdminRouter);
 router.use('/market/alerts', alertsRouter);
 router.use('/oracles/intelligence', oracleIntelligenceRouter);
 // Saved searches — auth is enforced inside savedSearchesRouter itself.
