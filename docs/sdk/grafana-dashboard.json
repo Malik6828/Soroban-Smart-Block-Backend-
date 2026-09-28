@@ -1,0 +1,179 @@
+{
+  "dashboard": {
+    "title": "SDK Generation Pipeline - SLO Dashboard",
+    "uid": "sdk-generation-slo",
+    "tags": ["sdk", "slo", "error-budget"],
+    "timezone": "browser",
+    "refresh": "1m",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Generation Success Rate (SLO: 99.9%)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(sdk_generation_success_total[5m]) / (rate(sdk_generation_success_total[5m]) + rate(sdk_generation_failure_total[5m])) * 100",
+            "legendFormat": "Success Rate %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 99.5},
+                {"color": "green", "value": 99.9}
+              ]
+            },
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Generation Latency P95 (SLO: < 5s)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(sdk_generation_duration_seconds_bucket[5m]))",
+            "legendFormat": "P95 Latency"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 5},
+                {"color": "red", "value": 10}
+              ]
+            },
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Error Budget Remaining",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "((rate(sdk_generation_success_total[30d]) / (rate(sdk_generation_success_total[30d]) + rate(sdk_generation_failure_total[30d])) - 0.999) / 0.001 * 100",
+            "legendFormat": "Error Budget %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 25},
+                {"color": "green", "value": 50}
+              ]
+            },
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Drift Detection Rate (SLO: < 1%)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(sdk_drift_detected_total[1h]) / rate(sdk_generation_success_total[1h]) * 100",
+            "legendFormat": "Drift Rate %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 0.5},
+                {"color": "red", "value": 1}
+              ]
+            },
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Breaking vs Additive Changes",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(sdk_breaking_changes_total[1h])",
+            "legendFormat": "Breaking Changes"
+          },
+          {
+            "expr": "rate(sdk_additive_changes_total[1h])",
+            "legendFormat": "Additive Changes"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Files Generated per Run",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(sdk_files_generated_total[5m])",
+            "legendFormat": "Files Generated"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Operations Generated",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sdk_operations_generated_total",
+            "legendFormat": "Operations"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Error Budget Burn Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "((1 - (rate(sdk_generation_success_total[1h]) / (rate(sdk_generation_success_total[1h]) + rate(sdk_generation_failure_total[1h])))) / 0.001) / 720",
+            "legendFormat": "Burn Rate (x)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 1},
+                {"color": "orange", "value": 2},
+                {"color": "red", "value": 5}
+              ]
+            },
+            "unit": "x"
+          }
+        }
+      }
+    ]
+  }
+}

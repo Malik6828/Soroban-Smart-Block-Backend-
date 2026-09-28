@@ -12,6 +12,8 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { checkVersionPolicy, diffSurfaces, type ApiSurface } from './surface';
+import { logger } from './sdk-logger';
+import { metrics, METRIC_NAMES } from './sdk-metrics';
 
 const ROOT = path.join(__dirname, '..', '..');
 const SURFACE = 'packages/client/api-surface.json';
@@ -49,31 +51,73 @@ function atRef(ref: string, file: string): string | null {
 }
 
 function main(): void {
+  const startTime = Date.now();
   const idx = process.argv.indexOf('--base');
   const base = idx >= 0 ? process.argv[idx + 1] : 'origin/main';
-  const before = atRef(base, SURFACE);
-  if (before === null) {
-    process.stdout.write(`No ${SURFACE} at ${base}; first introduction, nothing to compare.\n`);
-    return;
+  
+  logger.info('Starting breaking change check', { 
+    base,
+    correlation_id: logger.getCorrelationId()
+  });
+  
+  try {
+    const before = atRef(base, SURFACE);
+    if (before === null) {
+      logger.info('No previous API surface found', { base, surface: SURFACE });
+      process.stdout.write(`No ${SURFACE} at ${base}; first introduction, nothing to compare.\n`);
+      return;
+    }
+    
+    const after = fs.readFileSync(path.join(ROOT, SURFACE), 'utf8');
+    const diff = diffSurfaces(JSON.parse(before) as ApiSurface, JSON.parse(after) as ApiSurface);
+    
+    logger.info('API surface diff computed', { 
+      base,
+      breaking_count: diff.breaking.length,
+      additive_count: diff.additive.length
+    });
+    
+    metrics.incrementCounter(METRIC_NAMES.BREAKING_CHANGES, diff.breaking.length);
+    metrics.incrementCounter(METRIC_NAMES.ADDITIVE_CHANGES, diff.additive.length);
+    
+    process.stdout.write(
+      `API surface vs ${base}: ${diff.breaking.length} breaking, ${diff.additive.length} additive change(s)\n`,
+    );
+    
+    const violations: string[] = [];
+    for (const src of VERSION_SOURCES) {
+      const prev = atRef(base, src.file);
+      const abs = path.join(ROOT, src.file);
+      if (prev === null || !fs.existsSync(abs)) continue;
+      
+      logger.debug('Checking version policy', { package: src.name });
+      const v = checkVersionPolicy(diff, src.read(prev), src.read(fs.readFileSync(abs, 'utf8')));
+      violations.push(...v.map((m) => `${src.name}: ${m}`));
+    }
+    
+    if (violations.length > 0) {
+      logger.error('SDK versioning policy violated', { 
+        violation_count: violations.length,
+        violations
+      });
+      process.stderr.write(`SDK versioning policy violated:\n${violations.join('\n')}\n`);
+      process.exit(1);
+    }
+    
+    logger.info('SDK versioning policy satisfied', { 
+      duration_ms: Date.now() - startTime,
+      correlation_id: logger.getCorrelationId()
+    });
+    process.stdout.write('SDK versioning policy satisfied.\n');
+    
+  } catch (error) {
+    logger.error('Breaking change check failed', { 
+      error: String(error),
+      duration_ms: Date.now() - startTime,
+      correlation_id: logger.getCorrelationId()
+    });
+    throw error;
   }
-  const after = fs.readFileSync(path.join(ROOT, SURFACE), 'utf8');
-  const diff = diffSurfaces(JSON.parse(before) as ApiSurface, JSON.parse(after) as ApiSurface);
-  process.stdout.write(
-    `API surface vs ${base}: ${diff.breaking.length} breaking, ${diff.additive.length} additive change(s)\n`,
-  );
-  const violations: string[] = [];
-  for (const src of VERSION_SOURCES) {
-    const prev = atRef(base, src.file);
-    const abs = path.join(ROOT, src.file);
-    if (prev === null || !fs.existsSync(abs)) continue;
-    const v = checkVersionPolicy(diff, src.read(prev), src.read(fs.readFileSync(abs, 'utf8')));
-    violations.push(...v.map((m) => `${src.name}: ${m}`));
-  }
-  if (violations.length > 0) {
-    process.stderr.write(`SDK versioning policy violated:\n${violations.join('\n')}\n`);
-    process.exit(1);
-  }
-  process.stdout.write('SDK versioning policy satisfied.\n');
 }
 
 if (require.main === module) main();
