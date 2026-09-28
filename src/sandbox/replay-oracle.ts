@@ -1,5 +1,5 @@
 import { prismaRead } from '../db';
-import { SandboxEngine } from './runtime';
+import type { SandboxEngine } from './runtime';
 
 export interface ReplayComparison {
   equal: boolean;

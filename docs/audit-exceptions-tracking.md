@@ -37,7 +37,7 @@ Tracks the `.auditignore` exceptions accepted by `scripts/audit-check.js` so
 
 | Package                                          | Severity | Advisory                | Blocked on                                   | reviewBy   |
 | ------------------------------------------------- | -------- | ------------------------ | --------------------------------------------- | ---------- |
-| `@libp2p/kad-dht`                                  | high     | GHSA-32mq-hpph-xfvr       | `@libp2p/interface` v2 → v3 across the whole libp2p dependency tree (10+ packages) | 2026-11-30 |
+| `@libp2p/kad-dht`, `@libp2p/peer-store`, `libp2p` | high     | GHSA-32mq-hpph-xfvr, GHSA-vrf4-mx87-p53w | `@libp2p/interface` v2 → v3 across the whole libp2p dependency tree (10+ packages) | 2026-11-30 |
 | `vitest`, `@vitest/coverage-v8`, `@vitest/ui`, `vite` | critical/high | GHSA-5xrq-8626-4rwp and related | vitest v1 → v4 major migration (config, coverage, reporters) | 2026-11-30 |
 
 Each row above must be either fixed (dependency bumped, entry removed from

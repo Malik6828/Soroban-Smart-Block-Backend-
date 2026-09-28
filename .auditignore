@@ -8,6 +8,18 @@
       "reviewBy": "2026-11-30"
     },
     {
+      "package": "@libp2p/peer-store",
+      "advisories": ["GHSA-vrf4-mx87-p53w"],
+      "reason": "PeerStore accepts attacker-signed PeerRecords for a victim peer ID and stores certified attacker addresses. The fix requires libp2p@3.3.11, which depends on @libp2p/interface@^3.x — a breaking major version bump across the whole @libp2p/* stack pinned to the v2 interface via overrides. Blocked on the coordinated P2P-stack migration. Mitigating factor: P2P is opt-in via P2P_ENABLED.",
+      "reviewBy": "2026-11-30"
+    },
+    {
+      "package": "libp2p",
+      "advisories": ["GHSA-vrf4-mx87-p53w"],
+      "reason": "Transitively vulnerable via @libp2p/peer-store (GHSA-vrf4-mx87-p53w). Same fix (libp2p@3.3.11), same tracked P2P-stack migration. Mitigating factor: P2P is opt-in via P2P_ENABLED.",
+      "reviewBy": "2026-11-30"
+    },
+    {
       "package": "vitest",
       "advisories": ["GHSA-5xrq-8626-4rwp"],
       "reason": "Arbitrary file read/execute when the Vitest UI server is listening. The fix requires vitest@4.1.11, a major version bump from the currently pinned 1.x line with breaking config/reporter/coverage changes across the whole test toolchain. Mitigating factor: the Vitest UI server (`vitest --ui`, the vulnerable surface) is a local-only developer tool, never started in CI or any deployed environment (`test`/`test:full` both use `vitest run`, non-interactive). Tracked for a dedicated vitest v4 migration.",
