@@ -36,6 +36,7 @@ import { aaRouter } from './aa';
 import { complianceRouter } from './compliance';
 import { nlqRouter } from './nlq';
 import { dataMarketRouter } from './data-market';
+import { dataMarketUsageRouter, trackDataMarketUsage } from './data-market-usage';
 
 // ── Search API (#662 - Orphaned routes) ────────────────────────────────────────
 import { searchRouter } from './search';
@@ -179,7 +180,7 @@ router.use('/query', requireApiKey, nlqRouter);
 
 // ── Historical Data Market (#327) ─────────────────────────────────────────────
 // data-market includes write/purchase operations — key required
-router.use('/data-market', requireApiKey, dataMarketRouter);
+router.use('/data-market', requireApiKey, trackDataMarketUsage, dataMarketRouter);
 
 // ── NFT Collection Discovery, Rarity Engine, Marketplace Analytics & Portfolio ──
 import { nftRouter } from './nft';
