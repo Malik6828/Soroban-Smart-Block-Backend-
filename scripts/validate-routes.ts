@@ -33,6 +33,7 @@ interface ValidationResult {
   orphanedRouters: string[];
   pendingSchemaRouters: string[];
   mountedRouters: string[];
+  staleAllowlistRouters: string[];
   routeConflicts: RouteConflict[];
   warnings: string[];
   passed: boolean;
@@ -49,30 +50,16 @@ interface ValidationResult {
  * Status: pending-schema — awaiting Prisma migration before mounting.
  */
 const PENDING_SCHEMA_ROUTERS = new Set([
-  'advanced-events.ts',
-  'assets.ts',
-  'authMultisig.ts',
-  'authProfile.ts',
-  'authWebhooks.ts',
   'bn254.ts',
   'checked-arithmetic.ts',
-  'commodity-compliance.ts',
-  'dtcc-settlement.ts',
-  'factory-tracker.ts',
   'fuzzing.ts',
   'intelligence.ts',
-  'oracle-audit.ts',
-  'oracle-feeds.ts',
   'playground.ts',
   'protocol26-state-extension.ts',
   'reputation.ts',
   'resource-audit.ts',
   'revenue.ts',
-  'rwa-compliance.ts',
-  'settlement-batch.ts',
   'signers.ts',
-  'storage-trap.ts',
-  'storage.ts',
   'tax.ts',
   'tip.ts',
   'treasury.ts',
@@ -225,6 +212,7 @@ export function validateRoutes(maxOrphans = 0): ValidationResult {
   const orphanedRouters: string[] = [];
   const pendingSchemaRouters: string[] = [];
   const mountedRouters: string[] = [];
+  const staleAllowlistRouters: string[] = [];
   const warnings: string[] = [];
 
   // Exclusions: utility files that are not express routers
@@ -242,6 +230,7 @@ export function validateRoutes(maxOrphans = 0): ValidationResult {
 
     if (isMounted) {
       if (PENDING_SCHEMA_ROUTERS.has(file)) {
+        staleAllowlistRouters.push(file);
         warnings.push(
           `WARNING: "${file}" is in PENDING_SCHEMA_ROUTERS but is also mounted — remove it from the allowlist`,
         );
@@ -267,12 +256,14 @@ export function validateRoutes(maxOrphans = 0): ValidationResult {
 
   const passed =
     orphanedRouters.length <= maxOrphans &&
-    routeConflicts.filter((c) => c.conflictType === 'exact').length === 0;
+    routeConflicts.filter((c) => c.conflictType === 'exact').length === 0 &&
+    staleAllowlistRouters.length === 0;
 
   return {
     orphanedRouters,
     pendingSchemaRouters,
     mountedRouters,
+    staleAllowlistRouters,
     routeConflicts,
     warnings,
     passed,
@@ -337,6 +328,15 @@ if (require.main === module) {
     console.log('✅ No route conflicts detected');
   }
 
+  if (result.staleAllowlistRouters.length > 0) {
+    console.log(
+      `\n❌ STALE ALLOWLIST ENTRIES — ${result.staleAllowlistRouters.length} mounted router(s) in PENDING_SCHEMA_ROUTERS:`,
+    );
+    for (const s of result.staleAllowlistRouters) {
+      console.log(`   • ${s}`);
+    }
+  }
+
   if (result.warnings.length > 0) {
     console.log('\n⚠️  Warnings:');
     for (const w of result.warnings) {
@@ -355,7 +355,11 @@ if (require.main === module) {
     }
     process.exit(0);
   } else {
-    if (result.orphanedRouters.length > result.maxOrphans) {
+    if (result.staleAllowlistRouters.length > 0) {
+      console.log(
+        `❌ VALIDATION FAILED — ${result.staleAllowlistRouters.length} router(s) are mounted but remain in PENDING_SCHEMA_ROUTERS. Remove them from the allowlist.\n`,
+      );
+    } else if (result.orphanedRouters.length > result.maxOrphans) {
       console.log(
         `❌ VALIDATION FAILED — ${result.orphanedRouters.length} orphaned routers exceed budget of ${result.maxOrphans}. Mount or delete orphaned routers.\n`,
       );

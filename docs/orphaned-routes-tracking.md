@@ -64,6 +64,12 @@ governanceRouter)` without importing it — a latent crash and a false orphan.
 - **Stale allowlist cleaned**: 24 entries removed from `PENDING_SCHEMA_ROUTERS`
   for routers that are mounted (audit family, emergency family, `abi`,
   `archive`, and the earlier batch).
+- **Stale allowlist cleanup & CI enforcement (#1110)**: 14 mounted entries removed from
+  `PENDING_SCHEMA_ROUTERS` (`advanced-events`, `assets`, `authMultisig`, `authProfile`,
+  `authWebhooks`, `commodity-compliance`, `dtcc-settlement`, `factory-tracker`,
+  `oracle-audit`, `oracle-feeds`, `rwa-compliance`, `settlement-batch`,
+  `storage-trap`, `storage`). `scripts/validate-routes.ts` now fails CI if any
+  mounted router reappears in `PENDING_SCHEMA_ROUTERS`.
 
 ## Cleanup sprint checklist
 
