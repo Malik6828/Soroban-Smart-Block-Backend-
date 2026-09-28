@@ -346,3 +346,19 @@ router.use('/freeze-incidents', freezeIncidentsRouter);
 // ── Verifiable build & bytecode provenance (VE06 / #1047) ───────────────────
 import { provenanceRouter } from './provenance';
 router.use('/provenance', provenanceRouter);
+
+// ── Organizations & team management (PLT01 / #1022) ─────────────────────────
+import { organizationsRouter } from './organizations';
+router.use('/orgs', requireApiKey, organizationsRouter);
+
+// ── Public developer tools & integrations directory (ECO10 / #1021) ─────────
+import { toolsDirectoryRouter } from './tools-directory';
+router.use('/tools-directory', toolsDirectoryRouter);
+
+// ── Reputation badges (ECO09 / #1020) ────────────────────────────────────────
+import { reputationBadgesRouter } from './reputation-badges';
+router.use('/reputation-badges', reputationBadgesRouter);
+
+// ── Analytics template SQL export (ECO07 / #1018) ────────────────────────────
+import { sqlExportRouter } from './sql-export';
+router.use('/analytics/sql-export', requireApiKey, sqlExportRouter);
