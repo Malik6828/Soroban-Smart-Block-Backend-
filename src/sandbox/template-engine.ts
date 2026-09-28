@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { CallOutcome } from './runtime';
+import type { CallOutcome } from './runtime';
 
 export type TemplateId =
   | 'sep41-token'

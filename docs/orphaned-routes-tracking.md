@@ -25,25 +25,56 @@ allowlisted in `scripts/validate-routes.ts` (`PENDING_SCHEMA_ROUTERS`).
 
 ## Orphaned routers — mount or delete
 
-All previously orphaned routes have been resolved:
+Each entry below must be either mounted in `src/api/router.ts` or deleted.
+Update this list and the count above after every change.
 
-| Router file               | Decision | Status  | Notes                                 |
-| ------------------------- | -------- | ------- | ------------------------------------- |
-| `agents.ts`               | Mount    | Mounted | Mounted under `/agents`               |
-| `analytics-query.ts`      | Mount    | Mounted | Mounted under `/analytics/query`      |
-| `dashboards.ts`           | Mount    | Mounted | Mounted under `/dashboards`           |
-| `flash-loans.ts`          | Mount    | Mounted | Mounted under `/mev/flash-loans`      |
-| `forecast.ts`             | Delete   | Deleted | Superseded by `predict.ts`            |
-| `freeze.ts`               | Mount    | Mounted | Mounted under `/freeze`               |
-| `gas.ts`                  | Mount    | Mounted | Mounted under `/gas`                  |
-| `identity.ts`             | Mount    | Mounted | Mounted under `/identity`             |
-| `predict.ts`              | Mount    | Mounted | Mounted under `/predict`              |
-| `propagation.ts`          | Mount    | Mounted | Mounted under `/propagation`          |
-| `ramp.ts`                 | Mount    | Mounted | Mounted under `/ramp`                 |
-| `sandwich.ts`             | Mount    | Mounted | Mounted under `/mev/sandwich`         |
-| `sdks.ts`                 | Mount    | Mounted | Mounted under `/sdks`                 |
-| `search-routes.ts`        | Delete   | Deleted | Superseded by `search.ts`             |
-| `token-holders.ts`        | Mount    | Mounted | Mounted under `/token-holders`        |
-| `audit-report.ts`         | Mount    | Mounted | Mounted under `/audit-reports`        |
-| `graph.ts`                | Mount    | Mounted | Mounted under `/graph`                |
-| `verification-results.ts` | Mount    | Mounted | Mounted under `/verification-results` |
+| Router file          | Decision | Status |
+| -------------------- | -------- | ------ |
+| `agents.ts`          |          |        |
+| `analytics-query.ts` |          |        |
+| `dashboards.ts`      |          |        |
+| `flash-loans.ts`     |          |        |
+| `forecast.ts`        |          |        |
+| `freeze.ts`          |          |        |
+| `gas.ts`             |          |        |
+| `identity.ts`        |          |        |
+| `predict.ts`         |          |        |
+| `propagation.ts`     |          |        |
+| `ramp.ts`            |          |        |
+| `sandwich.ts`        |          |        |
+| `sdks.ts`            |          |        |
+| `search-routes.ts`   |          |        |
+| `token-holders.ts`   |          |        |
+
+## Resolved (2026-08-24)
+
+- **Validator accuracy**: mounted detection now follows imports transitively
+  from `router.ts`. Previously it only scanned direct imports, falsely
+  flagging 7 sub-mounted routers as orphans (`audit-anchor`, `audit-auditors`,
+  `audit-bot-router`, `audit-embed`, `audit-incidents`, `audit-verify`,
+  `contract-audit`).
+- **Missing import fixed**: `router.ts` called `router.use('/governance',
+governanceRouter)` without importing it — a latent crash and a false orphan.
+- **Duplicate mounts removed**: `/network` and `/market` were each mounted
+  twice in `router.ts`; the duplicates were deleted (exact route conflicts are
+  now 0).
+- **Stale allowlist cleaned**: 24 entries removed from `PENDING_SCHEMA_ROUTERS`
+  for routers that are mounted (audit family, emergency family, `abi`,
+  `archive`, and the earlier batch).
+- **Stale allowlist cleanup & CI enforcement (#1110)**: 14 mounted entries removed from
+  `PENDING_SCHEMA_ROUTERS` (`advanced-events`, `assets`, `authMultisig`, `authProfile`,
+  `authWebhooks`, `commodity-compliance`, `dtcc-settlement`, `factory-tracker`,
+  `oracle-audit`, `oracle-feeds`, `rwa-compliance`, `settlement-batch`,
+  `storage-trap`, `storage`). `scripts/validate-routes.ts` now fails CI if any
+  mounted router reappears in `PENDING_SCHEMA_ROUTERS`.
+
+## Cleanup sprint checklist
+
+1. [ ] Triage the 15 orphans: mount the ones with implemented handlers, delete
+       dead scaffolding (empty routers / stubs).
+2. [ ] Re-run `npm run validate-routes:ci` until green (orphans ≤ 15).
+3. [ ] Remove any newly-mounted routers from `PENDING_SCHEMA_ROUTERS` if they
+       were allowlisted.
+4. [ ] Lower `--max-orphans` in `package.json` (15 → 10 → 5 → 3 → 1 → 0) as
+       orphans are resolved, keeping CI red until the next target is met.
+5. [ ] Update this tracker's status table after each batch.

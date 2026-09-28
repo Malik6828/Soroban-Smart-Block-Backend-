@@ -36,6 +36,7 @@ import { aaRouter } from './aa';
 import { complianceRouter } from './compliance';
 import { nlqRouter } from './nlq';
 import { dataMarketRouter } from './data-market';
+import { dataMarketUsageRouter, trackDataMarketUsage } from './data-market-usage';
 
 // ── Search API (#662 - Orphaned routes) ────────────────────────────────────────
 import { searchRouter } from './search';
@@ -179,7 +180,7 @@ router.use('/query', requireApiKey, nlqRouter);
 
 // ── Historical Data Market (#327) ─────────────────────────────────────────────
 // data-market includes write/purchase operations — key required
-router.use('/data-market', requireApiKey, dataMarketRouter);
+router.use('/data-market', requireApiKey, trackDataMarketUsage, dataMarketRouter);
 
 // ── NFT Collection Discovery, Rarity Engine, Marketplace Analytics & Portfolio ──
 import { nftRouter } from './nft';
@@ -359,30 +360,18 @@ router.use('/freeze-incidents', freezeIncidentsRouter);
 import { provenanceRouter } from './provenance';
 router.use('/provenance', provenanceRouter);
 
-// ── Gas Analytics (#832) ────────────────────────────────────────────────────
-import { gasRouter } from './gas';
-router.use('/gas', gasRouter);
+// ── Organizations & team management (PLT01 / #1022) ─────────────────────────
+import { organizationsRouter } from './organizations';
+router.use('/orgs', requireApiKey, organizationsRouter);
 
-// ── Identity & Reputation Graph (#833) ──────────────────────────────────────
-import { identityRouter } from './identity';
-router.use('/identity', identityRouter);
+// ── Public developer tools & integrations directory (ECO10 / #1021) ─────────
+import { toolsDirectoryRouter } from './tools-directory';
+router.use('/tools-directory', toolsDirectoryRouter);
 
-// ── Predictive Analytics (#849) ─────────────────────────────────────────────
-import { predictRouter } from './predict';
-router.use('/predict', requireApiKey, predictRouter);
+// ── Reputation badges (ECO09 / #1020) ────────────────────────────────────────
+import { reputationBadgesRouter } from './reputation-badges';
+router.use('/reputation-badges', reputationBadgesRouter);
 
-// ── Vulnerability Propagation Analysis ─────────────────────────────────────
-import { propagationRouter } from './propagation';
-router.use('/propagation', propagationRouter);
-
-// ── Fiat On/Off-Ramp Gateway (#850) ─────────────────────────────────────────
-import { rampRouter } from './ramp';
-router.use('/ramp', rampRouter);
-
-// ── SDK Registry & Telemetry ────────────────────────────────────────────────
-import { sdksRouter } from './sdks';
-router.use('/sdks', sdksRouter);
-
-// ── Token Holders Analytics (#837) ──────────────────────────────────────────
-import { tokenHoldersRouter } from './token-holders';
-router.use('/token-holders', tokenHoldersRouter);
+// ── Analytics template SQL export (ECO07 / #1018) ────────────────────────────
+import { sqlExportRouter } from './sql-export';
+router.use('/analytics/sql-export', requireApiKey, sqlExportRouter);

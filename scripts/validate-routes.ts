@@ -33,6 +33,7 @@ interface ValidationResult {
   orphanedRouters: string[];
   pendingSchemaRouters: string[];
   mountedRouters: string[];
+  staleAllowlistRouters: string[];
   routeConflicts: RouteConflict[];
   warnings: string[];
   passed: boolean;
@@ -213,6 +214,7 @@ export function validateRoutes(maxOrphans = ORPHANED_ROUTER_BUDGET): ValidationR
   const orphanedRouters: string[] = [];
   const pendingSchemaRouters: string[] = [];
   const mountedRouters: string[] = [];
+  const staleAllowlistRouters: string[] = [];
   const warnings: string[] = [];
 
   // Exclusions: utility files that are not express routers
@@ -230,6 +232,7 @@ export function validateRoutes(maxOrphans = ORPHANED_ROUTER_BUDGET): ValidationR
 
     if (isMounted) {
       if (PENDING_SCHEMA_ROUTERS.has(file)) {
+        staleAllowlistRouters.push(file);
         warnings.push(
           `WARNING: "${file}" is in PENDING_SCHEMA_ROUTERS but is also mounted — remove it from the allowlist`,
         );
@@ -255,12 +258,14 @@ export function validateRoutes(maxOrphans = ORPHANED_ROUTER_BUDGET): ValidationR
 
   const passed =
     orphanedRouters.length <= maxOrphans &&
-    routeConflicts.filter((c) => c.conflictType === 'exact').length === 0;
+    routeConflicts.filter((c) => c.conflictType === 'exact').length === 0 &&
+    staleAllowlistRouters.length === 0;
 
   return {
     orphanedRouters,
     pendingSchemaRouters,
     mountedRouters,
+    staleAllowlistRouters,
     routeConflicts,
     warnings,
     passed,
@@ -325,6 +330,15 @@ if (require.main === module) {
     console.log('✅ No route conflicts detected');
   }
 
+  if (result.staleAllowlistRouters.length > 0) {
+    console.log(
+      `\n❌ STALE ALLOWLIST ENTRIES — ${result.staleAllowlistRouters.length} mounted router(s) in PENDING_SCHEMA_ROUTERS:`,
+    );
+    for (const s of result.staleAllowlistRouters) {
+      console.log(`   • ${s}`);
+    }
+  }
+
   if (result.warnings.length > 0) {
     console.log('\n⚠️  Warnings:');
     for (const w of result.warnings) {
@@ -343,7 +357,11 @@ if (require.main === module) {
     }
     process.exit(0);
   } else {
-    if (result.orphanedRouters.length > result.maxOrphans) {
+    if (result.staleAllowlistRouters.length > 0) {
+      console.log(
+        `❌ VALIDATION FAILED — ${result.staleAllowlistRouters.length} router(s) are mounted but remain in PENDING_SCHEMA_ROUTERS. Remove them from the allowlist.\n`,
+      );
+    } else if (result.orphanedRouters.length > result.maxOrphans) {
       console.log(
         `❌ VALIDATION FAILED — ${result.orphanedRouters.length} orphaned routers exceed budget of ${result.maxOrphans}. Mount or delete orphaned routers.\n`,
       );
