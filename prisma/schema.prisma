@@ -5327,3 +5327,50 @@ model FuzzJob {
   @@index([status])
   @@map("_fuzz_jobs")
 }
+
+// PLT05 migration models ─────────────────────────────────────────────────────
+model KeyScopePreset {
+  id          String   @map("id") @id @default(cuid())
+  name        String   @map("name") @unique
+  description String   @map("description")
+  scopes      String[] @map("scopes")
+  isBuiltin   Boolean  @map("is_builtin") @default(false)
+  createdAt   DateTime @map("created_at") @default(now())
+
+  @@map("_key_scope_presets")
+}
+
+// PLT04 migration models ─────────────────────────────────────────────────────
+
+model BillingEvent {
+  id            String   @map("id") @id @default(cuid())
+  developerId   String   @map("developer_id")
+  eventType     String   @map("event_type")
+  fromPlanId    String?  @map("from_plan_id")
+  toPlanId      String?  @map("to_plan_id")
+  amountCents   Int?     @map("amount_cents")
+  currency      String   @map("currency") @default("USD")
+  stripeEventId String?  @map("stripe_event_id")
+  metadata      Json     @map("metadata") @default("{}")
+  createdAt     DateTime @map("created_at") @default(now())
+
+  @@index([developerId])
+  @@index([eventType])
+  @@index([createdAt(sort: Desc)])
+  @@map("_billing_events")
+}
+
+model UsageQuota {
+  id                   String    @map("id") @id @default(cuid())
+  developerId          String    @map("developer_id") @unique
+  dailyRequestsUsed    Int       @map("daily_requests_used") @default(0)
+  monthlyRequestsUsed  Int       @map("monthly_requests_used") @default(0)
+  dailyResetAt         DateTime  @map("daily_reset_at") @default(now())
+  monthlyResetAt       DateTime  @map("monthly_reset_at") @default(now())
+  isQuotaExceeded      Boolean   @map("is_quota_exceeded") @default(false)
+  lastQuotaCheckAt     DateTime? @map("last_quota_check_at")
+  updatedAt            DateTime  @map("updated_at") @updatedAt
+
+  @@index([developerId])
+  @@map("_usage_quotas")
+}
