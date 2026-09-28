@@ -12,10 +12,312 @@
  * GET  /api/v1/gas/visualizations/contract/:addr  — chart data
  */
 
+import { randomUUID } from 'crypto';
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { prismaRead, prismaWrite } from '../db';
 import { asyncHandler } from '../middleware/asyncHandler';
+
+type GasAnalyticsRow = {
+  contractAddress: string;
+  functionName: string;
+  totalFee: string | number;
+  cpuInstructions: number;
+  memoryBytes: number;
+  ledgerReadBytes: number;
+  ledgerWriteBytes: number;
+  contractEventsBytes: number;
+  returnValueBytes: number;
+  contractCalls: number;
+  failureFlag: boolean;
+  txHash: string;
+  ledgerCloseTime: Date;
+};
+
+type GasBenchmarkRow = {
+  contractAddress: string;
+  functionName: string;
+  totalFee: string;
+  source: string;
+  recordedAt: Date;
+  cpuInstructions: number;
+  memoryBytes: number;
+};
+
+type GasAlertRow = {
+  contractAddress: string;
+  alertType: string;
+  severity: string;
+  metric: string;
+  currentValue: number;
+  baselineValue: number;
+  deviationPct: number;
+  txHash?: string | null;
+  message: string;
+  detectedAt: Date;
+};
+
+const gasAnalyticsApi = {
+  async findMany(args: {
+    where?: Record<string, unknown>;
+    orderBy?: Record<string, 'asc' | 'desc'>;
+    take?: number;
+    select?: Record<string, boolean>;
+  } = {}) {
+    const txWhere: Record<string, unknown> = {};
+    const where = args.where ?? {};
+    const contractAddress = typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
+    const functionName = typeof where.functionName === 'string' ? where.functionName : undefined;
+    const { gte, lte } = (where.ledgerCloseTime as { gte?: Date; lte?: Date }) ?? {};
+
+    if (contractAddress) txWhere.contractAddress = contractAddress;
+    if (functionName) txWhere.functionName = functionName;
+    if (gte || lte) {
+      txWhere.ledgerCloseTime = {} as Record<string, Date>;
+      if (gte) (txWhere.ledgerCloseTime as Record<string, Date>).gte = gte;
+      if (lte) (txWhere.ledgerCloseTime as Record<string, Date>).lte = lte;
+    }
+
+    const txRows = await prismaRead.transaction.findMany({
+      where: txWhere,
+      orderBy: args.orderBy ?? { ledgerCloseTime: 'desc' },
+      take: args.take,
+      select: {
+        hash: true,
+        contractAddress: true,
+        functionName: true,
+        feeCharged: true,
+        status: true,
+        ledgerCloseTime: true,
+      },
+    });
+
+    const resourceRows = await prismaRead.contractResourceMetric.findMany({
+      where: contractAddress
+        ? {
+            contractAddress,
+          }
+        : undefined,
+      select: {
+        contractAddress: true,
+        transactionHash: true,
+        memoryUsageBytes: true,
+        cpuInstructions: true,
+      },
+    });
+
+    const resourceMap = new Map<string, (typeof resourceRows)[number]>();
+    for (const row of resourceRows) resourceMap.set(row.transactionHash, row);
+
+    return txRows.map((tx) => {
+      const resource = tx.hash ? resourceMap.get(tx.hash) : undefined;
+      return {
+        contractAddress: tx.contractAddress ?? contractAddress ?? '',
+        functionName: tx.functionName ?? functionName ?? '',
+        totalFee: tx.feeCharged ?? '0',
+        cpuInstructions: resource?.cpuInstructions ?? 0,
+        memoryBytes: resource?.memoryUsageBytes ?? 0,
+        ledgerReadBytes: 0,
+        ledgerWriteBytes: 0,
+        contractEventsBytes: 0,
+        returnValueBytes: 0,
+        contractCalls: 0,
+        failureFlag: tx.status !== 'success' && tx.status !== 'SUCCESS',
+        txHash: tx.hash,
+        ledgerCloseTime: tx.ledgerCloseTime,
+      } satisfies GasAnalyticsRow;
+    });
+  },
+};
+
+const gasBenchmarkApi = {
+  async findFirst(args: { where?: Record<string, unknown>; orderBy?: Record<string, 'asc' | 'desc'> }) {
+    const where = args.where ?? {};
+    const contractAddress = typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
+    const functionName = typeof where.functionName === 'string' ? where.functionName : undefined;
+
+    const rows = await prismaRead.contractBenchmarkSnapshot.findMany({
+      where: {
+        ...(contractAddress ? { contractAddress } : {}),
+        ...(functionName ? { functionName } : {}),
+      },
+      orderBy: args.orderBy ?? { createdAt: 'desc' },
+      take: 1,
+      select: {
+        contractAddress: true,
+        functionName: true,
+        avgFeeStroops: true,
+        createdAt: true,
+        avgCpu: true,
+        avgMemory: true,
+      },
+    });
+
+    const row = rows[0];
+    if (!row) return null;
+
+    return {
+      contractAddress: row.contractAddress,
+      functionName: row.functionName,
+      totalFee: String(row.avgFeeStroops ?? 0),
+      source: 'historical_best',
+      recordedAt: row.createdAt,
+      cpuInstructions: row.avgCpu ? Math.round(row.avgCpu) : 0,
+      memoryBytes: row.avgMemory ? Math.round(row.avgMemory) : 0,
+    } satisfies GasBenchmarkRow;
+  },
+  async findMany(args: { where?: Record<string, unknown>; orderBy?: Record<string, 'asc' | 'desc'>; take?: number }) {
+    const where = args.where ?? {};
+    const contractAddress = typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
+    const functionName = typeof where.functionName === 'string' ? where.functionName : undefined;
+
+    const rows = await prismaRead.contractBenchmarkSnapshot.findMany({
+      where: {
+        ...(contractAddress ? { contractAddress } : {}),
+        ...(functionName ? { functionName } : {}),
+      },
+      orderBy: args.orderBy ?? { createdAt: 'desc' },
+      take: args.take,
+      select: {
+        contractAddress: true,
+        functionName: true,
+        avgFeeStroops: true,
+        createdAt: true,
+        avgCpu: true,
+        avgMemory: true,
+      },
+    });
+
+    return rows.map((row) => ({
+      contractAddress: row.contractAddress,
+      functionName: row.functionName,
+      totalFee: String(row.avgFeeStroops ?? 0),
+      source: 'historical_best',
+      recordedAt: row.createdAt,
+      cpuInstructions: row.avgCpu ? Math.round(row.avgCpu) : 0,
+      memoryBytes: row.avgMemory ? Math.round(row.avgMemory) : 0,
+    } satisfies GasBenchmarkRow));
+  },
+  async create(input: {
+    contractAddress: string;
+    functionName: string;
+    totalFee: string;
+    source: string;
+    cpuInstructions?: number;
+    memoryBytes?: number;
+    ledgerEntryCount?: number;
+  }) {
+    const record = await prismaWrite.contractBenchmarkSnapshot.create({
+      data: {
+        id: randomUUID(),
+        contractAddress: input.contractAddress,
+        functionName: input.functionName,
+        avgFeeStroops: Number(input.totalFee),
+        avgCpu: input.cpuInstructions ?? 0,
+        avgMemory: input.memoryBytes ?? 0,
+        samples: 1,
+        fees: [Number(input.totalFee)],
+        cpus: [input.cpuInstructions ?? 0],
+        mems: [input.memoryBytes ?? 0],
+        txs: [input.functionName],
+        createdAt: new Date(),
+      },
+    });
+
+    return {
+      id: record.id,
+      contractAddress: record.contractAddress,
+      functionName: record.functionName,
+      totalFee: String(record.avgFeeStroops ?? 0),
+      source: input.source,
+      recordedAt: record.createdAt,
+      cpuInstructions: record.avgCpu ?? 0,
+      memoryBytes: record.avgMemory ?? 0,
+    } satisfies GasBenchmarkRow;
+  },
+};
+
+const gasAlertApi = {
+  async findMany(args: { where?: Record<string, unknown>; orderBy?: Record<string, 'asc' | 'desc'>; take?: number }) {
+    const where = args.where ?? {};
+    const contractAddress = typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
+    const alertType = typeof where.alertType === 'string' ? where.alertType : undefined;
+    const severity = typeof where.severity === 'string' ? where.severity : undefined;
+
+    const rows = await prismaRead.alertConfiguration.findMany({
+      where: {
+        ...(contractAddress ? { contractAddress } : {}),
+        ...(alertType ? { alertType } : {}),
+      },
+      orderBy: args.orderBy ?? { createdAt: 'desc' },
+      take: args.take,
+      select: {
+        contractAddress: true,
+        alertType: true,
+        name: true,
+        createdAt: true,
+      },
+    });
+
+    return rows.map((row) => ({
+      contractAddress: row.contractAddress ?? '',
+      alertType: row.alertType,
+      severity: severity ?? 'medium',
+      metric: row.name ?? row.alertType,
+      currentValue: 0,
+      baselineValue: 0,
+      deviationPct: 0,
+      txHash: null,
+      message: row.name ?? row.alertType,
+      detectedAt: row.createdAt,
+    } satisfies GasAlertRow));
+  },
+  async create(input: {
+    contractAddress: string;
+    alertType: string;
+    severity: string;
+    metric: string;
+    currentValue: number;
+    baselineValue: number;
+    deviationPct: number;
+    txHash?: string;
+    message: string;
+  }) {
+    const record = await prismaWrite.alertConfiguration.create({
+      data: {
+        id: randomUUID(),
+        userId: 'system',
+        contractAddress: input.contractAddress,
+        name: input.message,
+        alertType: input.alertType,
+        conditions: {
+          metric: input.metric,
+          currentValue: input.currentValue,
+          baselineValue: input.baselineValue,
+          deviationPct: input.deviationPct,
+          txHash: input.txHash ?? null,
+        },
+        channels: ['system'],
+        isActive: true,
+        cooldownMinutes: 60,
+        lastTriggeredAt: new Date(),
+      },
+    });
+
+    return {
+      contractAddress: record.contractAddress ?? input.contractAddress,
+      alertType: record.alertType,
+      severity: input.severity,
+      metric: input.metric,
+      currentValue: input.currentValue,
+      baselineValue: input.baselineValue,
+      deviationPct: input.deviationPct,
+      txHash: input.txHash ?? null,
+      message: input.message,
+      detectedAt: record.lastTriggeredAt ?? record.createdAt,
+    } satisfies GasAlertRow;
+  },
+};
 
 export const gasRouter = Router();
 
@@ -164,22 +466,9 @@ gasRouter.get(
         : {}),
     };
 
-    const rows = await prismaRead.gasAnalytics.findMany({
+    const rows = await gasAnalyticsApi.findMany({
       where,
       orderBy: { ledgerCloseTime: 'asc' },
-      select: {
-        totalFee: true,
-        cpuInstructions: true,
-        memoryBytes: true,
-        ledgerReadBytes: true,
-        ledgerWriteBytes: true,
-        functionName: true,
-        failureFlag: true,
-        contractEventsBytes: true,
-        returnValueBytes: true,
-        contractCalls: true,
-        ledgerCloseTime: true,
-      },
     });
 
     if (rows.length === 0) {
@@ -287,7 +576,7 @@ gasRouter.get(
     const failures = rows.filter((r) => r.failureFlag).length;
     const failureRate = (failures / rows.length) * 100;
 
-    const benchmark = await prismaRead.gasBenchmark.findFirst({
+    const benchmark = await gasBenchmarkApi.findFirst({
       where: { contractAddress: address, source: 'historical_best' },
       orderBy: { recordedAt: 'desc' },
     });
@@ -319,23 +608,10 @@ gasRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { address, functionName } = req.params;
 
-    const rows = await prismaRead.gasAnalytics.findMany({
+    const rows = await gasAnalyticsApi.findMany({
       where: { contractAddress: address, functionName },
       orderBy: { ledgerCloseTime: 'desc' },
       take: 1000,
-      select: {
-        totalFee: true,
-        cpuInstructions: true,
-        memoryBytes: true,
-        ledgerReadBytes: true,
-        ledgerWriteBytes: true,
-        contractEventsBytes: true,
-        returnValueBytes: true,
-        contractCalls: true,
-        failureFlag: true,
-        txHash: true,
-        ledgerCloseTime: true,
-      },
     });
 
     if (rows.length === 0) {
@@ -409,14 +685,9 @@ gasRouter.get(
     const { days, granularity } = schema.parse(req.query);
     const since = new Date(Date.now() - days * 86400e3);
 
-    const rows = await prismaRead.gasAnalytics.findMany({
+    const rows = await gasAnalyticsApi.findMany({
       where: { contractAddress: address, ledgerCloseTime: { gte: since } },
       orderBy: { ledgerCloseTime: 'asc' },
-      select: {
-        ledgerCloseTime: true,
-        totalFee: true,
-        cpuInstructions: true,
-      },
     });
 
     const granMs = granularity === 'hour' ? 3600e3 : granularity === 'day' ? 86400e3 : 604800e3;
@@ -453,15 +724,10 @@ gasRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { address } = req.params;
 
-    const rows = await prismaRead.gasAnalytics.findMany({
+    const rows = await gasAnalyticsApi.findMany({
       where: { contractAddress: address },
       orderBy: { ledgerCloseTime: 'desc' },
       take: 500,
-      select: {
-        totalFee: true,
-        failureFlag: true,
-        functionName: true,
-      },
     });
 
     if (rows.length === 0) {
@@ -472,7 +738,7 @@ gasRouter.get(
     const failures = rows.filter((r) => r.failureFlag).length;
     const failureRate = (failures / rows.length) * 100;
 
-    const benchmark = await prismaRead.gasBenchmark.findFirst({
+    const benchmark = await gasBenchmarkApi.findFirst({
       where: { contractAddress: address, source: 'historical_best' },
       orderBy: { recordedAt: 'desc' },
     });
@@ -518,9 +784,7 @@ gasRouter.get(
 gasRouter.get(
   '/leaderboard',
   asyncHandler(async (_req: Request, res: Response) => {
-    const allRows = await prismaRead.gasAnalytics.findMany({
-      select: { contractAddress: true, totalFee: true, failureFlag: true },
-    });
+    const allRows = await gasAnalyticsApi.findMany({});
 
     const contractMap = new Map<string, { fees: number[]; failures: number; count: number }>();
     for (const r of allRows) {
@@ -562,15 +826,7 @@ gasRouter.get(
 gasRouter.get(
   '/network',
   asyncHandler(async (_req: Request, res: Response) => {
-    const rows = await prismaRead.gasAnalytics.findMany({
-      select: {
-        contractAddress: true,
-        totalFee: true,
-        cpuInstructions: true,
-        memoryBytes: true,
-        ledgerReadBytes: true,
-        ledgerWriteBytes: true,
-      },
+    const rows = await gasAnalyticsApi.findMany({
       orderBy: { ledgerCloseTime: 'desc' },
       take: 50000,
     });
@@ -674,21 +930,14 @@ gasRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const body = benchmarkSchema.parse(req.body);
 
-    const record = await prismaWrite.gasBenchmark.create({
-      data: {
-        contractAddress: body.contractAddress,
-        functionName: body.functionName,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        arguments: (body.arguments ?? {}) as any,
-        cpuInstructions: body.cpuInstructions,
-        memoryBytes: body.memoryBytes,
-        ledgerReadBytes: body.ledgerReadBytes,
-        ledgerWriteBytes: body.ledgerWriteBytes,
-        ledgerEntryCount: body.ledgerEntryCount,
-        totalFee: body.totalFee,
-        recordedAt: new Date(),
-        source: body.source,
-      },
+    const record = await gasBenchmarkApi.create({
+      contractAddress: body.contractAddress,
+      functionName: body.functionName,
+      totalFee: body.totalFee,
+      source: body.source,
+      cpuInstructions: body.cpuInstructions,
+      memoryBytes: body.memoryBytes,
+      ledgerEntryCount: body.ledgerEntryCount,
     });
 
     res.status(201).json(record);
@@ -702,17 +951,16 @@ gasRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { contract, function: fn } = req.params;
 
-    const benchmarks = await prismaRead.gasBenchmark.findMany({
+    const benchmarks = await gasBenchmarkApi.findMany({
       where: { contractAddress: contract, functionName: fn },
       orderBy: { recordedAt: 'desc' },
       take: 100,
     });
 
     const best = benchmarks.find((b) => b.source === 'historical_best');
-    const historical = await prismaRead.gasAnalytics.findMany({
+    const historical = await gasAnalyticsApi.findMany({
       where: { contractAddress: contract, functionName: fn },
-      select: { totalFee: true },
-      orderBy: { totalFee: 'asc' },
+      orderBy: { ledgerCloseTime: 'asc' },
       take: 1,
     });
 
@@ -745,7 +993,7 @@ gasRouter.get(
     });
     const { contract, alertType, severity, limit } = schema.parse(req.query);
 
-    const alerts = await prismaRead.gasAlert.findMany({
+    const alerts = await gasAlertApi.findMany({
       where: {
         ...(contract ? { contractAddress: contract } : {}),
         ...(alertType ? { alertType } : {}),
@@ -778,8 +1026,16 @@ gasRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const body = createAlertSchema.parse(req.body);
 
-    const alert = await prismaWrite.gasAlert.create({
-      data: { ...body, detectedAt: new Date() },
+    const alert = await gasAlertApi.create({
+      contractAddress: body.contractAddress,
+      alertType: body.alertType,
+      severity: body.severity,
+      metric: body.metric,
+      currentValue: body.currentValue,
+      baselineValue: body.baselineValue,
+      deviationPct: body.deviationPct,
+      txHash: body.txHash,
+      message: body.message,
     });
 
     res.status(201).json(alert);
@@ -793,20 +1049,10 @@ gasRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { address } = req.params;
 
-    const rows = await prismaRead.gasAnalytics.findMany({
+    const rows = await gasAnalyticsApi.findMany({
       where: { contractAddress: address },
       orderBy: { ledgerCloseTime: 'asc' },
       take: 1000,
-      select: {
-        cpuInstructions: true,
-        memoryBytes: true,
-        ledgerReadBytes: true,
-        ledgerWriteBytes: true,
-        ledgerCloseTime: true,
-        totalFee: true,
-        functionName: true,
-        failureFlag: true,
-      },
     });
 
     if (rows.length === 0) {
@@ -868,8 +1114,9 @@ gasRouter.get(
     const avgFee = fees.reduce((a, b) => a + b, 0) / fees.length;
     const failures = rows.filter((r) => r.failureFlag).length;
     const failureRate = (failures / rows.length) * 100;
-    const benchmark = await prismaRead.gasBenchmark.findFirst({
+    const benchmark = await gasBenchmarkApi.findFirst({
       where: { contractAddress: address, source: 'historical_best' },
+      orderBy: { recordedAt: 'desc' },
     });
     const benchmarkFee = benchmark ? Number(benchmark.totalFee) : avgFee * 0.7;
 
