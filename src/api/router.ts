@@ -36,6 +36,7 @@ import { aaRouter } from './aa';
 import { complianceRouter } from './compliance';
 import { nlqRouter } from './nlq';
 import { dataMarketRouter } from './data-market';
+import { dataMarketUsageRouter, trackDataMarketUsage } from './data-market-usage';
 
 // ── Search API (#662 - Orphaned routes) ────────────────────────────────────────
 import { searchRouter } from './search';
@@ -179,7 +180,7 @@ router.use('/query', requireApiKey, nlqRouter);
 
 // ── Historical Data Market (#327) ─────────────────────────────────────────────
 // data-market includes write/purchase operations — key required
-router.use('/data-market', requireApiKey, dataMarketRouter);
+router.use('/data-market', requireApiKey, trackDataMarketUsage, dataMarketRouter);
 
 // ── NFT Collection Discovery, Rarity Engine, Marketplace Analytics & Portfolio ──
 import { nftRouter } from './nft';
@@ -346,3 +347,18 @@ router.use('/freeze-incidents', freezeIncidentsRouter);
 // ── Verifiable build & bytecode provenance (VE06 / #1047) ───────────────────
 import { provenanceRouter } from './provenance';
 router.use('/provenance', provenanceRouter);
+
+// ── Public dataset & bulk-download exports (ECO02 / #1013) ──────────────────
+import { publicDatasetsRouter } from './public-datasets';
+router.use('/datasets', publicDatasetsRouter);
+
+// ── Community analytics query-template gallery (ECO04 / #1015) ──────────────
+import { queryTemplateGalleryRouter } from './query-template-gallery';
+router.use('/query-templates', requireApiKey, queryTemplateGalleryRouter);
+
+// ── Data marketplace quota & revenue dashboard (ECO05 / #1016) ──────────────
+router.use('/data-market-usage', requireApiKey, dataMarketUsageRouter);
+
+// ── Versioned schema registry for decoded events (ECO06 / #1017) ────────────
+import { eventSchemaRegistryRouter } from './event-schema-registry';
+router.use('/event-schemas', eventSchemaRegistryRouter);
