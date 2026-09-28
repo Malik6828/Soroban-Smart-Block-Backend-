@@ -33,6 +33,7 @@ import { feedOrchestrator } from './feed/orchestrator';
 import { eventBus } from './events/eventBus';
 import { startGraphqlEventBridge } from './graphql/subscriptions';
 import { featureFlags } from './feature-flags';
+import { startWebhookDeliveryWorker } from './webhooks/dispatcher';
 
 export async function initializeServices(disabledServices: string[]): Promise<void> {
   await initRateLimitStore();
@@ -47,6 +48,12 @@ export async function initializeServices(disabledServices: string[]): Promise<vo
   await prisma.$connect();
   dbConnectionStatus.set(1);
   markReady('db');
+
+  try {
+    startWebhookDeliveryWorker();
+  } catch (err) {
+    logger.error('[webhooks] Delivery worker failed to start', { error: String(err) });
+  }
 
   try {
     const { getLatestLedger } = await import('./indexer/rpc');

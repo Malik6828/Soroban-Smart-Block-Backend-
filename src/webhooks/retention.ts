@@ -18,6 +18,10 @@ export async function cleanupExpiredWebhookDeliveries(): Promise<void> {
         expiresAt: {
           lte: now,
         },
+        OR: [
+          { status: { in: ['success', 'failed', 'cancelled'] } },
+          { status: null },
+        ],
       },
     });
 
@@ -61,6 +65,15 @@ export async function cleanupExpiredDevWebhookDeliveries(): Promise<void> {
 export async function cleanupAllExpiredWebhookDeliveries(): Promise<void> {
   await cleanupExpiredWebhookDeliveries();
   await cleanupExpiredDevWebhookDeliveries();
+  const result = await prisma.webhookOutboxEvent.deleteMany({
+    where: {
+      expiresAt: { lte: new Date() },
+      status: { in: ['delivered', 'failed', 'cancelled'] },
+    },
+  });
+  if (result.count > 0) {
+    logger.info('Cleaned up expired webhook outbox events', { count: result.count });
+  }
 }
 
 /**
@@ -113,6 +126,7 @@ export async function forceCleanupSubscriptionDeliveries(subscriptionId: string)
     const result = await prisma.webhookDelivery.deleteMany({
       where: { subscriptionId },
     });
+    await prisma.webhookOutboxEvent.deleteMany({ where: { subscriptionId } });
 
     logger.info('Force cleaned up webhook deliveries', { subscriptionId, count: result.count });
     return result.count;

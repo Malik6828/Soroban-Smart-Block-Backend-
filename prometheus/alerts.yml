@@ -183,6 +183,58 @@ groups:
             GQL_SUBSCRIPTION_MAX_GLOBAL; see the runbook.
           runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/graphql-subscriptions/runbook.md#capacity-exhausted"
 
+  # Webhook batch delivery SLOs are defined in docs/webhook-batch-delivery-runbook.md.
+  - name: soroban_explorer_webhook_batch_delivery
+    interval: 30s
+    rules:
+      - record: webhook_batch:delivery_error_ratio:rate1h
+        expr: |
+          sum(rate(webhook_batch_operations_total{operation="delivery",outcome=~"http_error|retry|ssrf_blocked|payload_too_large"}[1h]))
+          /
+          clamp_min(sum(rate(webhook_batch_operations_total{operation="delivery",outcome=~"success|http_error|retry|ssrf_blocked|payload_too_large"}[1h])), 1e-9)
+
+      - alert: WebhookBatchErrorBudgetFastBurn
+        expr: webhook_batch:delivery_error_ratio:rate1h > (14.4 * 0.001)
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Webhook batch delivery is burning its error budget quickly"
+          description: >
+            The one-hour webhook batch delivery error ratio is {{ $value | humanizePercentage }}.
+            The SLO allows 0.1% failed attempts; this is a fast-burn condition.
+            Check destination errors, SSRF blocks, and retry backlog.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/webhook-batch-delivery-runbook.md"
+
+      - alert: WebhookBatchP99LatencyExceeded
+        expr: histogram_quantile(0.99, sum(rate(webhook_event_to_delivery_seconds_bucket{mode="batch"}[5m])) by (le)) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Webhook batch p99 event-to-client latency exceeds 100 ms"
+          description: >
+            p99 is {{ $value }} seconds over five minutes. Check batch window,
+            worker poll delay, outbox depth, indexer lag, and destination latency.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/webhook-batch-delivery-runbook.md#latency-slo"
+
+      - alert: WebhookOutboxBackpressure
+        expr: webhook_outbox_events > 40000
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Webhook outbox is nearing its per-subscription admission ceiling"
+          description: >
+            The aggregate pending/in-flight outbox count is {{ $value }} and has
+            crossed the 40,000 operating threshold. A single subscription is
+            capped at 50,000; identify per-subscription backlog and slow
+            destinations before admission backpressure begins.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/webhook-batch-delivery-runbook.md#backpressure"
+
       - alert: GraphQLSubscriptionAdmissionBudgetSlowBurn
         expr: graphql_subscriptions:admission_error_ratio:rate6h > (6 * 0.005)
         for: 30m

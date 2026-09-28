@@ -3845,6 +3845,8 @@ model WebhookDelivery {
   id String @map("id") @id
   subscriptionId String @map("subscription_id")
   eventId String? @map("event_id")
+  batchPayload Json? @map("batch_payload")
+  idempotencyKey String? @map("idempotency_key")
   attempt Int? @map("attempt")
   status String? @map("status")
   processingStatus String @map("processing_status") @default("idle") // "idle" | "processing" | "done"
@@ -3852,12 +3854,14 @@ model WebhookDelivery {
   httpStatus Int? @map("http_status")
   responseBody String? @map("response_body")
   errorMsg String? @map("error_msg")
+  errorCode String? @map("error_code")
   deliveredAt DateTime? @map("delivered_at")
   nextRetryAt DateTime? @map("next_retry_at")
   expiresAt DateTime? @map("expires_at")
   createdAt DateTime @map("created_at") @default(now())
 
   subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  outboxEvents WebhookOutboxEvent[]
 
   @@index([subscriptionId])
   @@index([expiresAt])
@@ -3876,6 +3880,9 @@ model WebhookSubscription {
   active Boolean @map("active") @default(true)
   storeResponseBody Boolean @map("store_response_body") @default(true)
   responseRetentionDays Int @map("response_retention_days") @default(90)
+  deliveryStrategy String @map("delivery_strategy") @default("immediate")
+  batchSize Int @map("batch_size") @default(100)
+  batchWindowMs Int @map("batch_window_ms") @default(50)
 
   // Challenge/response verification state. `verificationToken` is the
   // SHA-256 digest of the in-flight challenge (never the plaintext) so a
@@ -3889,9 +3896,35 @@ model WebhookSubscription {
   updatedAt DateTime @map("updated_at") @updatedAt
 
   delivery WebhookDelivery[]
+  outboxEvents WebhookOutboxEvent[]
 
   @@index([apiKeyId])
   @@map("_webhook_subscriptions")
+}
+
+model WebhookOutboxEvent {
+  id String @map("id") @id
+  subscriptionId String @map("subscription_id")
+  eventId String @map("event_id")
+  eventPayload Json @map("event_payload")
+  entityKey String @map("entity_key")
+  ledgerSequence Int @map("ledger_sequence")
+  transactionHash String @map("transaction_hash")
+  status String @default("pending")
+  batchDeliveryId String? @map("batch_delivery_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @map("created_at") @default(now())
+  updatedAt DateTime @map("updated_at") @updatedAt
+
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  batchDelivery WebhookDelivery? @relation(fields: [batchDeliveryId], references: [id], onDelete: SetNull)
+
+  @@unique([subscriptionId, eventId])
+  @@index([subscriptionId, status, createdAt])
+  @@index([subscriptionId, entityKey, status, ledgerSequence, transactionHash, eventId], map: "_webhook_outbox_order_idx")
+  @@index([batchDeliveryId])
+  @@index([expiresAt])
+  @@map("_webhook_outbox_events")
 }
 
 model YieldDistribution {

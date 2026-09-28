@@ -25,6 +25,7 @@ import { logger } from './logger';
 import { featureFlags } from './feature-flags';
 import { reconcileOrphanedFuzzJobs } from './fuzzing/fuzzer';
 import { registerScheduledScanner } from './scanning/scheduled-scanner';
+import { stopWebhookDeliveryWorker } from './webhooks/dispatcher';
 
 let isShuttingDown = false;
 const SERVICE_START_TIME = Date.now();
@@ -96,6 +97,8 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
     stopIndexerService();
     logger.info('[shutdown] Indexer service stopped');
+
+    await stopWebhookDeliveryWorker();
 
     await stopP2pNode().catch((err) =>
       logger.warn('[shutdown] Error stopping p2p node', { error: String(err) }),
