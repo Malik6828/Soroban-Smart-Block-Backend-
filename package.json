@@ -51,7 +51,7 @@
     "format:fix": "prettier --write 'src/**/*.ts' 'tests/**/*.ts'",
     "prepare": "husky",
     "validate-routes": "ts-node scripts/validate-routes.ts",
-    "validate-routes:ci": "ts-node scripts/validate-routes.ts --max-orphans 15",
+    "validate-routes:ci": "ts-node scripts/validate-routes.ts --max-orphans 0",
     "postman:generate": "node scripts/generate-postman.js",
     "postman:check": "node scripts/generate-postman.js --check",
     "audit:indexes": "ts-node scripts/audit-indexes.ts",

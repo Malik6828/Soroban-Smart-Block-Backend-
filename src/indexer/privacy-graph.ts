@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { prismaRead } from '../db';
+import { parseDecimalToBigInt, formatBigIntToDecimal } from './precision';
 
 export interface AddressCluster {
   addresses: string[];
@@ -216,25 +217,32 @@ export async function analyzeAmountCorrelation(address: string): Promise<AmountC
   for (const privTx of privacyTxs) {
     if (!privTx.totalValue) continue;
     const amount = privTx.totalValue;
-    const amtNum = parseFloat(amount);
+    const [whole = '0', fraction = ''] = amount.split('.');
 
-    if (amtNum % 1000 === 0 && amtNum > 0) {
-      matches.push({
-        privateAmount: amount,
-        publicAmount: amount,
-        matchType: 'round_number',
-        confidence: 0.6,
-        txHash: privTx.txHash,
-      });
-    }
-    if (amtNum % 10000 === 0 && amtNum > 0) {
-      matches.push({
-        privateAmount: amount,
-        publicAmount: amount,
-        matchType: 'large_round_number',
-        confidence: 0.7,
-        txHash: privTx.txHash,
-      });
+    if (!fraction || /^0+$/.test(fraction)) {
+      try {
+        const amtBig = BigInt(whole);
+        if (amtBig > 0n && amtBig % 1000n === 0n) {
+          matches.push({
+            privateAmount: amount,
+            publicAmount: amount,
+            matchType: 'round_number',
+            confidence: 0.6,
+            txHash: privTx.txHash,
+          });
+        }
+        if (amtBig > 0n && amtBig % 10000n === 0n) {
+          matches.push({
+            privateAmount: amount,
+            publicAmount: amount,
+            matchType: 'large_round_number',
+            confidence: 0.7,
+            txHash: privTx.txHash,
+          });
+        }
+      } catch {
+        // ignore non-integer or malformed amount
+      }
     }
   }
 
@@ -381,7 +389,7 @@ export async function analyzeCluster(addresses: string[]): Promise<{
   let totalTx = 0;
   let privacyTxCount = 0;
   const protocolsSet = new Set<string>();
-  let totalValue = 0;
+  let totalValueBig = 0n;
   let totalRisk = 0;
 
   for (const addr of addresses) {
@@ -391,7 +399,9 @@ export async function analyzeCluster(addresses: string[]): Promise<{
 
     for (const p of privacyTxs) {
       for (const proto of p.protocols) protocolsSet.add(proto);
-      totalValue += Number(p.totalValue) || 0;
+      if (p.totalValue) {
+        totalValueBig += parseDecimalToBigInt(p.totalValue, 7);
+      }
       totalRisk += (p as any).riskScore || 0;
     }
   }
@@ -403,7 +413,7 @@ export async function analyzeCluster(addresses: string[]): Promise<{
     privacyRate: totalTx > 0 ? privacyTxCount / totalTx : 0,
     commonProtocols: Array.from(protocolsSet),
     riskScore: privacyTxCount > 0 ? totalRisk / privacyTxCount : 0,
-    totalValue: String(totalValue),
+    totalValue: formatBigIntToDecimal(totalValueBig, 7),
   };
 }
 

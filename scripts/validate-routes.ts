@@ -49,6 +49,8 @@ interface ValidationResult {
  *
  * Status: pending-schema — awaiting Prisma migration before mounting.
  */
+export const ORPHANED_ROUTER_BUDGET = 0;
+
 const PENDING_SCHEMA_ROUTERS = new Set([
   'bn254.ts',
   'checked-arithmetic.ts',
@@ -204,7 +206,7 @@ function detectConflicts(prefixes: string[]): RouteConflict[] {
  *   validation fails. CI uses a non-zero budget to enforce gradual cleanup;
  *   pass 0 (default) for strict mode.
  */
-export function validateRoutes(maxOrphans = 0): ValidationResult {
+export function validateRoutes(maxOrphans = ORPHANED_ROUTER_BUDGET): ValidationResult {
   const discoveredFiles = discoverRouterFiles();
   const mountedSet = findMountedRouters();
   const prefixes = extractMountedPrefixes();
@@ -277,7 +279,7 @@ export function validateRoutes(maxOrphans = 0): ValidationResult {
 if (require.main === module) {
   // Parse --max-orphans N (CI enforcement budget, defaults to strict 0)
   const budgetIndex = process.argv.indexOf('--max-orphans');
-  let maxOrphans = 0;
+  let maxOrphans = ORPHANED_ROUTER_BUDGET;
   if (budgetIndex !== -1) {
     const raw = process.argv[budgetIndex + 1];
     const parsed = raw !== undefined ? parseInt(raw, 10) : NaN;

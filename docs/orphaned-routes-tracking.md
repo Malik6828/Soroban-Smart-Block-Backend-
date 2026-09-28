@@ -6,25 +6,22 @@ allowlisted in `scripts/validate-routes.ts` (`PENDING_SCHEMA_ROUTERS`).
 
 ## Enforcement
 
-- CI runs `npm run validate-routes:ci` (`--max-orphans 15`) on every push/PR.
-- CI fails when **orphaned routers > 15** or when **exact route conflicts** exist.
+- CI runs `npm run validate-routes:ci` (`--max-orphans 0`) on every push/PR.
+- CI fails when **orphaned routers > 0** or when **exact route conflicts** exist.
 - The validator follows relative imports transitively from `router.ts`, so
-  routers composed inside other routers (e.g. the `audit-*` family under
-  `audit.ts`, `contract-audit.ts` under `contracts.ts`) count as mounted.
-- Budget is defined in `package.json` (`validate-routes:ci`). Lower it as
-  orphans are resolved; the target is `0`.
-- Run locally: `npm run validate-routes` (strict) or
-  `npm run validate-routes:ci` (budget 15).
+  routers composed inside other routers count as mounted.
+- Budget is defined in `package.json` (`validate-routes:ci`) and `scripts/validate-routes.ts` (`ORPHANED_ROUTER_BUDGET`).
+- Run locally: `npm run validate-routes` or `npm run validate-routes:ci` (both enforce budget 0).
 
-## Current status (2026-08-24)
+## Current status (2026-09-28)
 
-| Metric                       | Count  |
-| ---------------------------- | ------ |
-| Mounted routers              | 69     |
-| Pending-schema (allowlisted) | 36     |
-| **Orphaned routers**         | **15** |
-| Exact route conflicts        | 0      |
-| CI budget                    | 15     |
+| Metric                       | Count |
+| ---------------------------- | ----- |
+| Mounted routers              | 123   |
+| Pending-schema (allowlisted) | 15    |
+| **Orphaned routers**         | **0** |
+| Exact route conflicts        | 0     |
+| CI budget                    | 0     |
 
 ## Orphaned routers — mount or delete
 

@@ -12,6 +12,7 @@ const feeRead = prismaRead as any;
 const feeWrite = prismaWrite as any;
 import { computeLpApr, computeStakingApr, detectAnomalies } from './fee-classifier';
 import { logger } from '../logger';
+import { parseDecimalToBigInt, formatBigIntToDecimal } from './precision';
 
 // ---------------------------------------------------------------------------
 // Period helpers
@@ -58,18 +59,25 @@ async function aggregateForContract(
   if (events.length === 0) return;
 
   const sum = (types: string[]) =>
-    events
-      .filter((e) => types.includes(e.feeType))
-      .reduce((s, e) => s + Number(e.amount), 0)
-      .toString();
+    formatBigIntToDecimal(
+      events
+        .filter((e) => types.includes(e.feeType))
+        .reduce((s, e) => s + parseDecimalToBigInt(e.amount, 7), 0n),
+      7,
+    );
 
   const destSum = (dests: string[]) =>
-    events
-      .filter((e) => dests.includes(e.destination))
-      .reduce((s, e) => s + Number(e.amount), 0)
-      .toString();
+    formatBigIntToDecimal(
+      events
+        .filter((e) => dests.includes(e.destination))
+        .reduce((s, e) => s + parseDecimalToBigInt(e.amount, 7), 0n),
+      7,
+    );
 
-  const totalFees = events.reduce((s, e) => s + Number(e.amount), 0).toString();
+  const totalFees = formatBigIntToDecimal(
+    events.reduce((s, e) => s + parseDecimalToBigInt(e.amount, 7), 0n),
+    7,
+  );
   const usdTotal = events.reduce((s, e) => s + (e.usdValue ?? 0), 0);
   const uniqueSenders = new Set(events.map((e) => e.sender).filter(Boolean)).size;
   const feeToken = events[0]?.token ?? 'XLM';
@@ -153,10 +161,10 @@ async function computeYieldSnapshot(contractAddress: string): Promise<void> {
     });
     return rows.reduce(
       (acc, r) => ({
-        lp: acc.lp + Number(r.lpRewards ?? 0),
-        staker: acc.staker + Number(r.stakerRewards ?? 0),
+        lp: acc.lp + parseDecimalToBigInt(r.lpRewards, 7),
+        staker: acc.staker + parseDecimalToBigInt(r.stakerRewards, 7),
       }),
-      { lp: 0, staker: 0 },
+      { lp: 0n, staker: 0n },
     );
   };
 
@@ -168,13 +176,20 @@ async function computeYieldSnapshot(contractAddress: string): Promise<void> {
 
   const [w1, w7, w30] = await Promise.all([revForWindow(1), revForWindow(7), revForWindow(30)]);
 
-  const lpApr1d = computeLpApr(w1.lp, tvl, 365);
-  const lpApr7d = computeLpApr(w7.lp / 7, tvl, 365);
-  const lpApr30d = computeLpApr(w30.lp / 30, tvl, 365);
-  const stApr1d = computeStakingApr(w1.staker, stakedValue, 365);
-  const stApr7d = computeStakingApr(w7.staker / 7, stakedValue, 365);
-  const stApr30d = computeStakingApr(w30.staker / 30, stakedValue, 365);
-  const totalRev = w30.lp + w30.staker;
+  const w1Lp = Number(formatBigIntToDecimal(w1.lp, 7));
+  const w7Lp = Number(formatBigIntToDecimal(w7.lp, 7));
+  const w30Lp = Number(formatBigIntToDecimal(w30.lp, 7));
+  const w1Staker = Number(formatBigIntToDecimal(w1.staker, 7));
+  const w7Staker = Number(formatBigIntToDecimal(w7.staker, 7));
+  const w30Staker = Number(formatBigIntToDecimal(w30.staker, 7));
+
+  const lpApr1d = computeLpApr(w1Lp, tvl, 365);
+  const lpApr7d = computeLpApr(w7Lp / 7, tvl, 365);
+  const lpApr30d = computeLpApr(w30Lp / 30, tvl, 365);
+  const stApr1d = computeStakingApr(w1Staker, stakedValue, 365);
+  const stApr7d = computeStakingApr(w7Staker / 7, stakedValue, 365);
+  const stApr30d = computeStakingApr(w30Staker / 30, stakedValue, 365);
+  const totalRev = w30Lp + w30Staker;
   const revenueShare = tvl > 0 && totalRev > 0 ? (totalRev / tvl) * 100 : null;
 
   await feeWrite.yieldSnapshot.create({

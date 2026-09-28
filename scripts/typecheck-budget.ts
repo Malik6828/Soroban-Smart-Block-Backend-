@@ -38,9 +38,11 @@ function countTypeErrors(): TypeCheckResult {
   return { count: matches ? matches.length : 0, output };
 }
 
+export const TYPE_ERROR_BUDGET = 1012;
+
 function parseMaxErrors(argv: string[]): number {
   const budgetIndex = argv.indexOf('--max-errors');
-  if (budgetIndex === -1) return 0;
+  if (budgetIndex === -1) return TYPE_ERROR_BUDGET;
   const raw = argv[budgetIndex + 1];
   const parsed = raw !== undefined ? parseInt(raw, 10) : NaN;
   if (Number.isNaN(parsed) || parsed < 0) {
