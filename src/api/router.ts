@@ -254,6 +254,10 @@ router.use('/emergency', emergencyBaseRouter);
 router.use('/stellar', stellarRouter);
 router.use('/privacy', privacyRouter);
 router.use('/mev', mevRouter);
+import { flashLoanRouter } from './flash-loans';
+import { sandwichRouter } from './sandwich';
+router.use('/mev/flash-loans', flashLoanRouter);
+router.use('/mev/sandwich', sandwichRouter);
 router.use('/developer', developerRouter);
 router.use('/schedule', scheduleRouter);
 // Data Mesh Platform APIs
@@ -271,6 +275,10 @@ import { vendorAuditsRouter } from './vendor-audits';
 router.use('/vendor-audits', vendorAuditsRouter);
 import { securityScansRouter } from './security-scans';
 router.use('/security-scans', securityScansRouter);
+import { auditReportRouter } from './audit-report';
+router.use('/audit-reports', auditReportRouter);
+import { verificationResultsRouter } from './verification-results';
+router.use('/verification-results', requireApiKey, verificationResultsRouter);
 
 // ── Analytics & Dashboards (#839) ─────────────────────────────────────────────
 import { analyticsRouter } from './analytics';
@@ -285,6 +293,10 @@ router.use('/analytics/query', requireApiKey, analyticsQueryRouter);
 // Stream + OLAP + cold-storage query gateway. Compute-heavy — key required.
 import { lakehouseRouter } from './lakehouse';
 router.use('/lakehouse', requireApiKey, lakehouseRouter);
+
+// ── Contract call graph & graph explorer ──────────────────────────────────────
+import { graphRouter } from './graph';
+router.use('/graph', graphRouter);
 
 // ── ABI & Advanced Events (#843) ───────────────────────────────────────────────
 // ABI management and advanced event filtering for Soroban contracts.
@@ -346,3 +358,31 @@ router.use('/freeze-incidents', freezeIncidentsRouter);
 // ── Verifiable build & bytecode provenance (VE06 / #1047) ───────────────────
 import { provenanceRouter } from './provenance';
 router.use('/provenance', provenanceRouter);
+
+// ── Gas Analytics (#832) ────────────────────────────────────────────────────
+import { gasRouter } from './gas';
+router.use('/gas', gasRouter);
+
+// ── Identity & Reputation Graph (#833) ──────────────────────────────────────
+import { identityRouter } from './identity';
+router.use('/identity', identityRouter);
+
+// ── Predictive Analytics (#849) ─────────────────────────────────────────────
+import { predictRouter } from './predict';
+router.use('/predict', requireApiKey, predictRouter);
+
+// ── Vulnerability Propagation Analysis ─────────────────────────────────────
+import { propagationRouter } from './propagation';
+router.use('/propagation', propagationRouter);
+
+// ── Fiat On/Off-Ramp Gateway (#850) ─────────────────────────────────────────
+import { rampRouter } from './ramp';
+router.use('/ramp', rampRouter);
+
+// ── SDK Registry & Telemetry ────────────────────────────────────────────────
+import { sdksRouter } from './sdks';
+router.use('/sdks', sdksRouter);
+
+// ── Token Holders Analytics (#837) ──────────────────────────────────────────
+import { tokenHoldersRouter } from './token-holders';
+router.use('/token-holders', tokenHoldersRouter);

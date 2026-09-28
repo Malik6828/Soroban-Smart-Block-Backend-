@@ -35,20 +35,29 @@ async function computeBucket(bucket: Bucket, bucketStart: Date): Promise<void> {
   const txCount = rows.length;
   if (txCount === 0) return;
 
-  let totalFees = 0;
+  let totalFeesBig = 0n;
   let successCount = 0;
   let failedCount = 0;
 
   for (const row of rows) {
-    const fee = Number(row.feeCharged ?? 0);
-    if (Number.isFinite(fee) && fee > 0) totalFees += fee;
+    if (row.feeCharged) {
+      try {
+        const fee = BigInt(row.feeCharged);
+        if (fee > 0n) totalFeesBig += fee;
+      } catch {
+        // ignore malformed fee string
+      }
+    }
     if (row.status === 'success') successCount++;
     else failedCount++;
   }
 
-  const feeBurn = BASE_FEE_STROOPS * txCount;
-  const networkRevenue = Math.max(0, totalFees - feeBurn);
-  const avgFee = txCount > 0 ? totalFees / txCount : 0;
+  const feeBurnBig = BigInt(BASE_FEE_STROOPS) * BigInt(txCount);
+  const networkRevenueBig = totalFeesBig > feeBurnBig ? totalFeesBig - feeBurnBig : 0n;
+  const avgFee = txCount > 0 ? Number(totalFeesBig) / txCount : 0;
+  const totalFees = Number(totalFeesBig);
+  const feeBurn = Number(feeBurnBig);
+  const networkRevenue = Number(networkRevenueBig);
 
   await prismaWrite.protocolEconomicsSnapshot.upsert({
     where: { bucket_bucketStart: { bucket, bucketStart } },

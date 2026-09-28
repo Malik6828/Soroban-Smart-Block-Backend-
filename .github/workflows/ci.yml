@@ -128,7 +128,7 @@ jobs:
       # type error is introduced. The large pre-existing backlog is paid
       # down incrementally rather than blocking every PR; see
       # scripts/typecheck-budget.ts.
-      - name: Type-check (src, budget 1374)
+      - name: Type-check (src, budget 1012)
         run: npm run typecheck:budget:ci
 
       - name: Type-check (scripts)
@@ -136,10 +136,9 @@ jobs:
 
       # Orphaned router validation — fails CI if the number of routers in
       # src/api/ that are neither mounted (directly or transitively) in
-      # router.ts nor allowlisted exceeds the budget. The budget equals the
-      # true orphan count (15) and is lowered as orphans are mounted or
-      # deleted (tracked in docs/orphaned-routes-tracking.md).
-      - name: Validate orphaned routers (budget 15)
+      # router.ts nor allowlisted exceeds the budget. All orphans are
+      # resolved (mounted or deleted); budget is strictly 0.
+      - name: Validate orphaned routers (budget 0)
         run: npm run validate-routes:ci
 
       # #903: Reject unpinned `:latest` image tags in compose manifests.

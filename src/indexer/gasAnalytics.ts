@@ -58,16 +58,25 @@ export class GasAnalyticsProcessor {
     if (rows.length === 0) return;
 
     const fees = rows
-      .map((r) => Number(r.feeCharged))
-      .filter((f) => Number.isFinite(f) && f > 0)
-      .sort((a, b) => a - b);
+      .map((r) => {
+        try {
+          return r.feeCharged ? BigInt(r.feeCharged) : 0n;
+        } catch {
+          return 0n;
+        }
+      })
+      .filter((f) => f > 0n)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
     if (fees.length === 0) return;
 
-    const avgFee = fees.reduce((a, b) => a + b, 0) / fees.length;
-    const medianFee = median(fees);
-    const peakFee = fees[fees.length - 1];
-    const minFee = fees[0];
+    const totalFees = fees.reduce((a, b) => a + b, 0n);
+    const avgFee = Number(totalFees) / fees.length;
+    const mid = Math.floor(fees.length / 2);
+    const medianFee =
+      fees.length % 2 === 0 ? Number(fees[mid - 1] + fees[mid]) / 2 : Number(fees[mid]);
+    const peakFee = Number(fees[fees.length - 1]);
+    const minFee = Number(fees[0]);
 
     await this.prismaWrite.gasAnalyticsSnapshot.upsert({
       where: { bucket_bucketStart: { bucket, bucketStart } },
