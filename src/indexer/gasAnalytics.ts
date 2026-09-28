@@ -10,9 +10,13 @@
  */
 
 import type { PrismaClient } from '@prisma/client';
+import { config } from '../config';
+import { featureFlags } from '../feature-flags';
+import { gasFeeAlertEvaluatorOperations } from '../metrics';
 import { scheduler } from '../scheduler/cron-scheduler';
 import type { Logger } from '../services/container';
 import { container } from '../services/container';
+import { evaluateGasFeeSnapshot } from './gasFeeAlertEvaluator';
 import { uuidv7 } from '../utils/uuidv7';
 
 type Bucket = 'hour' | 'day' | 'week';
@@ -89,10 +93,34 @@ export class GasAnalyticsProcessor {
         medianFee,
         peakFee,
         minFee,
+        feeSumStroops: totalFees.toString(),
         txCount: fees.length,
       },
-      update: { bucketEnd, avgFee, medianFee, peakFee, minFee, txCount: fees.length },
+      update: {
+        bucketEnd,
+        avgFee,
+        medianFee,
+        peakFee,
+        minFee,
+        feeSumStroops: totalFees.toString(),
+        txCount: fees.length,
+      },
     });
+
+    if (bucket === 'hour' && featureFlags.shouldStartSync('gasFeeAlerts')) {
+      try {
+        await evaluateGasFeeSnapshot(
+          this.prismaRead,
+          this.prismaWrite,
+          config.stellarNetwork,
+          { bucketStart, bucketEnd, feeSumStroops: totalFees.toString(), txCount: fees.length },
+        );
+      } catch (error) {
+        gasFeeAlertEvaluatorOperations.inc({ outcome: 'error' });
+        this.logger.error('[gasAnalytics] fee alert snapshot evaluation failed:', error);
+        throw error;
+      }
+    }
   }
 
   /**

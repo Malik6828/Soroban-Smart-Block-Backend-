@@ -226,6 +226,7 @@ jobs:
           TESTNET_DATABASE_URL: postgresql://test:test@localhost:5432/test
           STELLAR_NETWORK: testnet
           CONTRACT_ABI_INTEGRATION: '1'
+          GAS_FEE_ALERTS_INTEGRATION: '1'
 
       # Issue #898: Run coverage with threshold enforcement.
       # Vitest exits non-zero if any threshold configured in vitest.config.ts
@@ -238,9 +239,13 @@ jobs:
           STELLAR_NETWORK: testnet
           CACHE_URL: memory://
           CONTRACT_ABI_INTEGRATION: '1'
+          GAS_FEE_ALERTS_INTEGRATION: '1'
 
       - name: Enforce 90% coverage on contract ABI submission code
         run: ts-node --transpile-only scripts/verify-contract-abi-coverage.ts
+
+      - name: Enforce 90% coverage on gas fee alert evaluation and outbox
+        run: ts-node --transpile-only scripts/verify-gas-fee-alert-coverage.ts
 
       # Issue #898: Upload coverage artifacts so reports are inspectable in the
       # GitHub Actions UI for each PR and push. Retained for 30 days.

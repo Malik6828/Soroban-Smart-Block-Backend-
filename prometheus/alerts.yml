@@ -385,3 +385,59 @@ groups:
             {{ $value | humanizePercentage }} of console-originated API requests returned 5xx.
             Usually mirrors an API incident; check HTTP5xxSurgeRatio first.
           runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/try-it/runbook.md#console-requests-failing"
+
+  # ── Gas fee alerts ──────────────────────────────────────────────────────────
+  # Delivery-attempt objective: >= 99.5% successful attempts over 30 days.
+  # Event-to-client target: p99 < 100ms; not yet load-tested at sustained peak.
+  - name: soroban_explorer_gas_fee_alerts
+    interval: 30s
+    rules:
+      - record: gas_fee_alerts:delivery_error_ratio:rate1h
+        expr: |
+          sum(rate(gas_fee_alert_delivery_attempts_total{outcome=~"http_error|network_error|ssrf_blocked"}[1h]))
+          /
+          clamp_min(sum(rate(gas_fee_alert_delivery_attempts_total{outcome=~"success|http_error|network_error|ssrf_blocked"}[1h])), 1e-9)
+
+      - record: gas_fee_alerts:delivery_error_ratio:rate6h
+        expr: |
+          sum(rate(gas_fee_alert_delivery_attempts_total{outcome=~"http_error|network_error|ssrf_blocked"}[6h]))
+          /
+          clamp_min(sum(rate(gas_fee_alert_delivery_attempts_total{outcome=~"success|http_error|network_error|ssrf_blocked"}[6h])), 1e-9)
+
+      - alert: GasFeeAlertDeliveryBudgetFastBurn
+        expr: gas_fee_alerts:delivery_error_ratio:rate1h > (14.4 * 0.005)
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Gas fee alert delivery is burning its error budget quickly"
+          description: >
+            Gas alert delivery failures exceed the 14.4x fast-burn threshold against
+            the 0.5% monthly attempt-error budget. Disable gasFeeAlerts and inspect
+            webhook delivery history, SSRF errors, and worker/database health.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/GAS_FEE_ALERTS.md#rollout-and-recovery"
+
+      - alert: GasFeeAlertDeliveryBudgetSlowBurn
+        expr: gas_fee_alerts:delivery_error_ratio:rate6h > (6 * 0.005)
+        for: 30m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Gas fee alert delivery is consuming its error budget"
+          description: "Delivery failures exceed the 6x slow-burn threshold over six hours."
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/GAS_FEE_ALERTS.md#rollout-and-recovery"
+
+      - alert: GasFeeAlertEventToClientP99High
+        expr: histogram_quantile(0.99, sum by (le) (rate(gas_fee_alert_event_to_delivery_seconds_bucket[10m]))) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Gas fee alert event-to-client p99 exceeds 100ms"
+          description: >
+            The measured p99 is {{ $value | humanizeDuration }}. This alert objective
+            requires sustained-load verification before it can be considered an SLO.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/GAS_FEE_ALERTS.md#telemetry-and-error-behavior"

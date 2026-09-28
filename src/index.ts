@@ -26,6 +26,7 @@ import { featureFlags } from './feature-flags';
 import { reconcileOrphanedFuzzJobs } from './fuzzing/fuzzer';
 import { registerScheduledScanner } from './scanning/scheduled-scanner';
 import { stopWebhookDeliveryWorker } from './webhooks/dispatcher';
+import { stopGasAnalyticsScheduler } from './indexer/gasAnalytics';
 
 let isShuttingDown = false;
 const SERVICE_START_TIME = Date.now();
@@ -96,6 +97,7 @@ async function gracefulShutdown(signal: string): Promise<void> {
     }
 
     stopIndexerService();
+    stopGasAnalyticsScheduler();
     logger.info('[shutdown] Indexer service stopped');
 
     await stopWebhookDeliveryWorker();

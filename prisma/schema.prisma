@@ -1077,6 +1077,46 @@ model AlertConfiguration {
   @@map("_alert_configurations")
 }
 
+model GasFeeAlertRule {
+  id                      String    @map("id") @id @default(cuid())
+  developerId             String    @map("developer_id") @db.VarChar(128)
+  network                 String    @db.VarChar(16)
+  direction               String    @db.VarChar(8)
+  thresholdStroops        String    @map("threshold_stroops") @db.VarChar(78)
+  cooldownSeconds         Int       @map("cooldown_seconds") @default(900)
+  isActive                Boolean   @map("is_active") @default(true)
+  lastObservedFeeStroops   String?   @map("last_observed_fee_stroops") @db.VarChar(78)
+  lastEvaluatedAt         DateTime? @map("last_evaluated_at")
+  lastTriggeredAt         DateTime? @map("last_triggered_at")
+  createdAt               DateTime  @map("created_at") @default(now())
+  updatedAt               DateTime  @map("updated_at") @updatedAt
+
+  @@index([developerId, network, isActive])
+  @@index([network, isActive])
+  @@map("_gas_fee_alert_rules")
+}
+
+model GasFeeAlertEvent {
+  id                     String    @map("id") @id @default(cuid())
+  eventKey               String    @unique @map("event_key") @db.VarChar(256)
+  ruleId                 String    @map("rule_id") @db.VarChar(128)
+  developerId            String    @map("developer_id") @db.VarChar(128)
+  network                String    @db.VarChar(16)
+  direction              String    @db.VarChar(8)
+  thresholdStroops       String    @map("threshold_stroops") @db.VarChar(78)
+  previousFeeStroops     String    @map("previous_fee_stroops") @db.VarChar(78)
+  currentFeeStroops      String    @map("current_fee_stroops") @db.VarChar(78)
+  trend                  String    @db.VarChar(8)
+  bucketStart            DateTime  @map("bucket_start")
+  bucketEnd              DateTime  @map("bucket_end")
+  dispatchedAt           DateTime? @map("dispatched_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([ruleId, bucketStart])
+  @@map("_gas_fee_alert_events")
+}
+
 model IncidentReport {
   id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address") @db.VarChar(56)
@@ -2714,6 +2754,7 @@ model GasAnalyticsSnapshot {
   medianFee Float? @map("median_fee")
   peakFee Float? @map("peak_fee")
   minFee Float? @map("min_fee")
+  feeSumStroops String @map("fee_sum_stroops") @db.VarChar(78) @default("0")
   txCount Int @map("tx_count")
   createdAt DateTime @map("created_at") @default(now())
 
@@ -3846,7 +3887,7 @@ model WebhookDelivery {
   subscriptionId String @map("subscription_id")
   eventId String? @map("event_id")
   batchPayload Json? @map("batch_payload")
-  idempotencyKey String? @map("idempotency_key")
+  idempotencyKey String? @unique(map: "_webhook_deliveries_idempotency_key_key") @map("idempotency_key")
   attempt Int? @map("attempt")
   status String? @map("status")
   processingStatus String @map("processing_status") @default("idle") // "idle" | "processing" | "done"

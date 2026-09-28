@@ -13,9 +13,14 @@
  */
 
 import { randomUUID } from 'crypto';
-import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
+import { NextFunction, Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { prismaRead, prismaWrite } from '../db';
+import { featureFlags } from '../feature-flags';
+import { logger } from '../logger';
+import { gasFeeAlertApiOperations, gasFeeAlertApiOperationsOtel } from '../metrics';
+import { requireApiKey } from '../middleware/apiKeyAuth';
 import { asyncHandler } from '../middleware/asyncHandler';
 
 type GasAnalyticsRow = {
@@ -320,6 +325,185 @@ const gasAlertApi = {
 };
 
 export const gasRouter = Router();
+export const gasFeeAlertsRouter = Router();
+
+const feeAlertRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ error: 'Rate limit exceeded', code: 'RATE_LIMITED' }),
+});
+
+function recordFeeAlertOperation(operation: string, outcome: string): void {
+  gasFeeAlertApiOperations.inc({ operation, outcome });
+  gasFeeAlertApiOperationsOtel.add(1, { operation, outcome });
+}
+
+async function gasFeeAlertFeatureGate(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (!(await featureFlags.isAvailable('gasFeeAlerts'))) {
+      recordFeeAlertOperation('gate', 'schema_unavailable');
+      res.status(503).json({
+        error: 'Gas fee alerts are unavailable until the database migration is applied',
+        code: 'SCHEMA_UNAVAILABLE',
+      });
+      return;
+    }
+    if (!(await featureFlags.isEnabled('gasFeeAlerts', { developerId: req.apiKey?.developerId }))) {
+      recordFeeAlertOperation('gate', 'disabled');
+      res.status(404).json({ error: 'Feature not found', code: 'FEATURE_DISABLED' });
+      return;
+    }
+    next();
+  } catch (error) {
+    recordFeeAlertOperation('gate', 'error');
+    logger.error('gas fee alert feature gate failed', { error: String(error) });
+    res.status(503).json({ error: 'Feature availability could not be verified', code: 'FEATURE_UNAVAILABLE' });
+  }
+}
+
+const feeAlertNetworkSchema = z.enum(['mainnet', 'testnet', 'devnet']);
+const feeAlertThresholdSchema = z
+  .string()
+  .regex(/^(0|[1-9][0-9]{0,77})$/)
+  .refine((threshold) => threshold !== '0', 'Threshold must be greater than zero');
+const feeAlertCooldownSchema = z.number().int().min(1).max(604800);
+
+const createFeeAlertRuleSchema = z
+  .object({
+    network: feeAlertNetworkSchema,
+    direction: z.enum(['high', 'low']),
+    thresholdStroops: feeAlertThresholdSchema,
+    cooldownSeconds: feeAlertCooldownSchema.default(900),
+  })
+  .strict();
+
+const updateFeeAlertRuleSchema = z
+  .object({
+    thresholdStroops: feeAlertThresholdSchema.optional(),
+    cooldownSeconds: feeAlertCooldownSchema.optional(),
+    isActive: z.boolean().optional(),
+  })
+  .strict()
+  .refine((data) => Object.keys(data).length > 0, 'At least one field must be provided');
+
+const feeAlertRuleIdSchema = z.string().min(1).max(128);
+
+gasFeeAlertsRouter.use(feeAlertRateLimit, requireApiKey, gasFeeAlertFeatureGate);
+
+gasFeeAlertsRouter.get(
+  '/fee-alert-rules',
+  asyncHandler(async (req: Request, res: Response) => {
+    const query = z
+      .object({
+        network: feeAlertNetworkSchema,
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+      })
+      .strict()
+      .parse(req.query);
+    const developerId = req.apiKey?.developerId;
+    if (!developerId) return res.status(401).json({ error: 'API key required', code: 'API_KEY_REQUIRED' });
+
+    const rules = await prismaRead.gasFeeAlertRule.findMany({
+      where: { developerId, network: query.network },
+      orderBy: { createdAt: 'desc' },
+      take: query.limit,
+    });
+    recordFeeAlertOperation('list', 'success');
+    res.json({ rules, count: rules.length });
+  }),
+);
+
+gasFeeAlertsRouter.get(
+  '/fee-alert-events',
+  asyncHandler(async (req: Request, res: Response) => {
+    const query = z
+      .object({
+        network: feeAlertNetworkSchema,
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+      })
+      .strict()
+      .parse(req.query);
+    const developerId = req.apiKey?.developerId;
+    if (!developerId) return res.status(401).json({ error: 'API key required', code: 'API_KEY_REQUIRED' });
+
+    const events = await prismaRead.gasFeeAlertEvent.findMany({
+      where: {
+        developerId,
+        network: query.network,
+      },
+      orderBy: { bucketEnd: 'desc' },
+      take: query.limit,
+    });
+    recordFeeAlertOperation('events_list', 'success');
+    res.json({ events, count: events.length });
+  }),
+);
+
+gasFeeAlertsRouter.post(
+  '/fee-alert-rules',
+  asyncHandler(async (req: Request, res: Response) => {
+    const input = createFeeAlertRuleSchema.parse(req.body);
+    const developerId = req.apiKey?.developerId;
+    if (!developerId) return res.status(401).json({ error: 'API key required', code: 'API_KEY_REQUIRED' });
+
+    const rule = await prismaWrite.gasFeeAlertRule.create({ data: { ...input, developerId } });
+    recordFeeAlertOperation('create', 'success');
+    logger.info('gas fee alert rule created', {
+      ruleId: rule.id,
+      developerId,
+      network: rule.network,
+      direction: rule.direction,
+    });
+    res.status(201).json(rule);
+  }),
+);
+
+gasFeeAlertsRouter.patch(
+  '/fee-alert-rules/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = feeAlertRuleIdSchema.parse(req.params.id);
+    const input = updateFeeAlertRuleSchema.parse(req.body);
+    const developerId = req.apiKey?.developerId;
+    if (!developerId) return res.status(401).json({ error: 'API key required', code: 'API_KEY_REQUIRED' });
+
+    const existing = await prismaRead.gasFeeAlertRule.findFirst({ where: { id, developerId } });
+    if (!existing) return res.status(404).json({ error: 'Fee alert rule not found', code: 'NOT_FOUND' });
+
+    const rule = await prismaWrite.gasFeeAlertRule.update({
+      where: { id },
+      data: {
+        ...input,
+        ...(input.thresholdStroops !== undefined
+          ? { lastObservedFeeStroops: null, lastEvaluatedAt: null }
+          : {}),
+      },
+    });
+    recordFeeAlertOperation('update', 'success');
+    logger.info('gas fee alert rule updated', { ruleId: rule.id, developerId });
+    res.json(rule);
+  }),
+);
+
+gasFeeAlertsRouter.delete(
+  '/fee-alert-rules/:id',
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = feeAlertRuleIdSchema.parse(req.params.id);
+    const developerId = req.apiKey?.developerId;
+    if (!developerId) return res.status(401).json({ error: 'API key required', code: 'API_KEY_REQUIRED' });
+
+    const result = await prismaWrite.gasFeeAlertRule.deleteMany({ where: { id, developerId } });
+    if (result.count === 0) return res.status(404).json({ error: 'Fee alert rule not found', code: 'NOT_FOUND' });
+    recordFeeAlertOperation('delete', 'success');
+    logger.info('gas fee alert rule deleted', { ruleId: id, developerId });
+    res.status(204).send();
+  }),
+);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

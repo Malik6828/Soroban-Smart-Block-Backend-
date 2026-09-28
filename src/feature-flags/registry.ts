@@ -43,6 +43,13 @@ export const FEATURE_FLAG_DEFINITIONS: FlagDefinition[] = [
     defaultEnabled: false,
   },
   {
+    key: 'gasFeeAlerts',
+    description:
+      'User-managed high and low network fee thresholds, evaluated against indexed fee snapshots.',
+    requiredTables: ['_gas_fee_alert_rules', '_gas_fee_alert_events', '_gas_analytics_snapshots'],
+    defaultEnabled: false,
+  },
+  {
     key: 'contractAbiSubmissions',
     description:
       'Community ABI submissions with admin moderation and publication into the contract registry.',
