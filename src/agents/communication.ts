@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { prismaWrite, prismaRead } from '../db';
+import { agentRead, agentWrite } from './store';
 import type { AgentMessagePayload } from './types';
 import { logger } from '../logger';
 
@@ -43,14 +43,14 @@ class AgentCommunicationBus {
 
     payload.signature = this.signMessage(payload);
 
-    await prismaWrite.agentMessage.create({
+    await agentWrite.agentMessage.create({
       data: {
         id: messageId,
         fromAgentId: params.fromAgentId,
         toAgentId: params.toAgentId,
         type: params.type,
         subject: params.subject,
-        body: params.body as any,
+        body: params.body,
         signature: payload.signature,
         responseToId: params.responseToId,
         status: 'pending',
@@ -75,7 +75,7 @@ class AgentCommunicationBus {
     messageId: string,
     status: 'delivered' | 'acknowledged' | 'rejected',
   ): Promise<void> {
-    await prismaWrite.agentMessage.update({
+    await agentWrite.agentMessage.update({
       where: { id: messageId },
       data: {
         status,
@@ -137,7 +137,7 @@ class AgentCommunicationBus {
   }
 
   async getConversation(agentId1: string, agentId2: string, limit = 50) {
-    return prismaRead.agentMessage.findMany({
+    return agentRead.agentMessage.findMany({
       where: {
         OR: [
           { fromAgentId: agentId1, toAgentId: agentId2 },
@@ -150,7 +150,7 @@ class AgentCommunicationBus {
   }
 
   async getUnreadMessages(agentId: string) {
-    return prismaRead.agentMessage.findMany({
+    return agentRead.agentMessage.findMany({
       where: {
         toAgentId: agentId,
         status: 'pending',
@@ -190,28 +190,28 @@ class AgentDiscoveryRegistry {
     pricePerMonth?: string;
     metadata?: Record<string, unknown>;
   }): Promise<void> {
-    const existing = await prismaRead.agentRegistration.findUnique({
+    const existing = await agentRead.agentRegistration.findUnique({
       where: { agentId: params.agentId },
     });
 
     if (existing) {
-      await prismaWrite.agentRegistration.update({
+      await agentWrite.agentRegistration.update({
         where: { agentId: params.agentId },
         data: {
           capabilities: params.capabilities,
           pricePerCall: params.pricePerCall || existing.pricePerCall,
           pricePerMonth: params.pricePerMonth || existing.pricePerMonth,
-          metadata: (params.metadata || {}) as any,
+          metadata: params.metadata || {},
         },
       });
     } else {
-      await prismaWrite.agentRegistration.create({
+      await agentWrite.agentRegistration.create({
         data: {
           agentId: params.agentId,
           capabilities: params.capabilities,
           pricePerCall: params.pricePerCall,
           pricePerMonth: params.pricePerMonth,
-          metadata: (params.metadata || {}) as any,
+          metadata: params.metadata || {},
         },
       });
     }
@@ -233,7 +233,7 @@ class AgentDiscoveryRegistry {
       totalJobsDone: number;
     }>
   > {
-    const allRegistrations = await prismaRead.agentRegistration.findMany({
+    const allRegistrations = await agentRead.agentRegistration.findMany({
       where: { isActive: true },
       include: {
         agent: {
@@ -262,7 +262,7 @@ class AgentDiscoveryRegistry {
   }
 
   async unregister(agentId: string): Promise<void> {
-    await prismaWrite.agentRegistration.update({
+    await agentWrite.agentRegistration.update({
       where: { agentId },
       data: { isActive: false },
     });
@@ -292,7 +292,7 @@ class AgentReputationSystem {
       throw new Error('Rating score must be between 1 and 5');
     }
 
-    await prismaWrite.agentRating.create({
+    await agentWrite.agentRating.create({
       data: {
         fromAgentId: params.fromAgentId,
         toAgentId: params.toAgentId,
@@ -303,14 +303,14 @@ class AgentReputationSystem {
     });
 
     // Update aggregate rating
-    const ratings = await prismaRead.agentRating.findMany({
+    const ratings = await agentRead.agentRating.findMany({
       where: { toAgentId: params.toAgentId },
       select: { score: true },
     });
 
     const avgRating = ratings.reduce((sum, r) => sum + r.score, 0) / ratings.length;
 
-    await prismaWrite.agentRegistration.updateMany({
+    await agentWrite.agentRegistration.updateMany({
       where: { agentId: params.toAgentId },
       data: {
         rating: Math.round(avgRating * 100) / 100,
@@ -320,7 +320,7 @@ class AgentReputationSystem {
 
     // Also increment jobs done if there's an execution
     if (params.executionId) {
-      await prismaWrite.agentRegistration.updateMany({
+      await agentWrite.agentRegistration.updateMany({
         where: { agentId: params.toAgentId },
         data: { totalJobsDone: { increment: 1 } },
       });
@@ -332,7 +332,7 @@ class AgentReputationSystem {
     totalRatings: number;
     recentRatings: Array<{ score: number; review: string | null; createdAt: Date }>;
   }> {
-    const ratings = await prismaRead.agentRating.findMany({
+    const ratings = await agentRead.agentRating.findMany({
       where: { toAgentId: agentId },
       orderBy: { createdAt: 'desc' },
       take: 20,

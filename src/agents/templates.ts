@@ -369,12 +369,12 @@ export function getTemplatesByCategory(category: string): AgentTemplate[] {
 }
 
 export async function seedTemplates(): Promise<void> {
-  const { prismaWrite } = await import('../db');
+  const { agentWrite } = await import('./store');
 
   for (const template of agentTemplates) {
-    const existing = await prismaWrite.agentTemplate.findUnique({ where: { id: template.id } });
+    const existing = await agentWrite.agentTemplate.findUnique({ where: { id: template.id } });
     if (!existing) {
-      await prismaWrite.agentTemplate.create({
+      await agentWrite.agentTemplate.create({
         data: {
           id: template.id,
           name: template.name,
@@ -383,11 +383,11 @@ export async function seedTemplates(): Promise<void> {
           version: template.version,
           author: template.author,
           price: template.price || 0,
-          configSchema: template.configSchema as any,
+          configSchema: template.configSchema,
           wasmBase64: template.wasmBase64,
-          abi: template.abi as any,
-          defaultPermissions: template.defaultPermissions as any,
-          defaultLimits: template.defaultLimits as any,
+          abi: template.abi,
+          defaultPermissions: template.defaultPermissions,
+          defaultLimits: template.defaultLimits,
           isPublished: true,
         },
       });
