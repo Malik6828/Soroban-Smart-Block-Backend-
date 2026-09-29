@@ -13,6 +13,10 @@ on:
       - 'src/events/**'
       - 'src/feed/**'
       - 'src/api/tryit/**'
+      - 'src/api/contract-abi-submissions.ts'
+      - 'src/services/contract-abi-submissions.ts'
+      - 'prisma/schema.prisma'
+      - 'prisma/migrations/**'
       - 'src/lib/openapi/**'
       - 'tests/load/**'
       - '.github/workflows/soak.yml'
@@ -104,4 +108,56 @@ jobs:
         with:
           name: tryit-load-report
           path: tryit-load-report.json
+          retention-days: 30
+  contract-abi-submissions:
+    name: Contract ABI submission PostgreSQL soak
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/test
+      TESTNET_DATABASE_URL: postgresql://test:test@localhost:5432/test
+      STELLAR_NETWORK: testnet
+      CACHE_URL: memory://
+      CONTRACT_ABI_TARGET_RPS: '1'
+      CONTRACT_ABI_P99_BUDGET_MS: '250'
+      CONTRACT_ABI_HEAP_BUDGET_MB: '128'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply database migrations
+        run: npx prisma migrate deploy
+
+      - name: Run 10x load test (PR smoke or 30-minute soak)
+        shell: bash
+        env:
+          CONTRACT_ABI_DURATION_SEC: ${{ github.event_name == 'pull_request' && '60' || github.event.inputs.duration_sec || '1800' }}
+        run: node --expose-gc -r ts-node/register/transpile-only tests/load/contract-abi-submissions-soak.ts | tee contract-abi-soak-report.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-abi-submissions-soak-report
+          path: contract-abi-soak-report.json
           retention-days: 30

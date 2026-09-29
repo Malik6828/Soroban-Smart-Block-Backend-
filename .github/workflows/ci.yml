@@ -194,6 +194,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Apply schema migrations for PostgreSQL integration tests
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          TESTNET_DATABASE_URL: postgresql://test:test@localhost:5432/test
+
       # Verification-engine tests exercise SmtSolver.isSatisfiable, which
       # shells out to a real SMT backend; ubuntu-latest runners don't ship z3.
       - name: Install z3 solver
@@ -219,6 +225,7 @@ jobs:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
           TESTNET_DATABASE_URL: postgresql://test:test@localhost:5432/test
           STELLAR_NETWORK: testnet
+          CONTRACT_ABI_INTEGRATION: '1'
 
       # Issue #898: Run coverage with threshold enforcement.
       # Vitest exits non-zero if any threshold configured in vitest.config.ts
@@ -230,6 +237,10 @@ jobs:
           TESTNET_DATABASE_URL: postgresql://test:test@localhost:5432/test
           STELLAR_NETWORK: testnet
           CACHE_URL: memory://
+          CONTRACT_ABI_INTEGRATION: '1'
+
+      - name: Enforce 90% coverage on contract ABI submission code
+        run: ts-node --transpile-only scripts/verify-contract-abi-coverage.ts
 
       # Issue #898: Upload coverage artifacts so reports are inspectable in the
       # GitHub Actions UI for each PR and push. Retained for 30 days.
