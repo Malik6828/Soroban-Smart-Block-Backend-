@@ -1,4 +1,6 @@
+import { randomUUID } from 'crypto';
 import { Router, Request, Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prismaRead, prismaWrite } from '../db';
 import {
@@ -11,6 +13,7 @@ import {
   runFuzzCampaign,
   checkForExploit,
   computeEcosystemIndex,
+  type CallGraph,
   type ContractCall,
 } from '../indexer/composability-engine';
 import {
@@ -34,6 +37,85 @@ const analyzeSchema = z.object({
   contractCalls: z.array(callSchema),
 });
 
+// ── JSON payloads for the Prisma Json columns ──────────────────────────────────
+
+/** JSON projection of a single `CallNode`, stored in `call_graph.nodes`. */
+type CallNodeJson = { address: string; method: string; depth: number };
+
+/** JSON projection of a single `CallEdge`, stored in `call_graph.edges`. */
+type CallEdgeJson = { from: string; to: string; method: string; argCount: number };
+
+/** JSON projection of the engine's `CallGraph`. */
+type CallGraphJson = { nodes: CallNodeJson[]; edges: CallEdgeJson[] };
+
+/** JSON projection of a `ContractCall`, stored in `contract_calls`. */
+type ContractCallJson = {
+  from: string;
+  to: string;
+  method: string;
+  args?: Prisma.InputJsonArray;
+};
+
+function toCallGraphJson(graph: CallGraph): CallGraphJson {
+  return {
+    nodes: graph.nodes.map((node) => ({
+      address: node.address,
+      method: node.method,
+      depth: node.depth,
+    })),
+    edges: graph.edges.map((edge) => ({
+      from: edge.from,
+      to: edge.to,
+      method: edge.method,
+      argCount: edge.argCount,
+    })),
+  };
+}
+
+function toContractCallsJson(calls: ContractCall[]): Prisma.InputJsonArray {
+  return calls.map((call) => {
+    const entry: ContractCallJson = { from: call.from, to: call.to, method: call.method };
+    const args = toJsonArray(call.args);
+    if (args) entry.args = args;
+    return entry;
+  });
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * Converts an engine result into a value Prisma accepts for a Json column,
+ * dropping anything that is not JSON-representable (undefined, functions, …).
+ */
+function toJsonValue(value: unknown): Prisma.InputJsonValue | undefined {
+  if (value === null) return null;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+  if (Array.isArray(value)) return toJsonArray(value);
+  if (isJsonObject(value)) {
+    const record: Record<string, Prisma.InputJsonValue> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      const converted = toJsonValue(entry);
+      if (converted !== undefined) record[key] = converted;
+    }
+    return record;
+  }
+  return undefined;
+}
+
+function toJsonArray(values: unknown[] | undefined): Prisma.InputJsonArray | undefined {
+  if (!values) return undefined;
+  const items: Prisma.InputJsonValue[] = [];
+  for (const value of values) {
+    const converted = toJsonValue(value);
+    if (converted !== undefined) items.push(converted);
+  }
+  return items;
+}
+
 // ── Core analysis helper ─────────────────────────────────────────────────────
 async function analyzeAndPersist(
   txHash: string,
@@ -47,21 +129,25 @@ async function analyzeAndPersist(
   const safetyScore = verification.scores.total;
   const riskLevel = computeRiskLevel(safetyScore);
 
+  const callGraphJson = toCallGraphJson(callGraph);
+  const contractCallsJson = toContractCallsJson(contractCalls);
+
   const composed = await prismaWrite.composedTransaction.upsert({
     where: { txHash },
     update: {
-      contractCalls: contractCalls as object[],
-      callGraph: callGraph as object,
+      contractCalls: contractCallsJson,
+      callGraph: callGraphJson,
       safetyScore,
       riskLevel,
       analysisStatus: 'completed',
     },
     create: {
+      id: randomUUID(),
       txHash,
       ledgerSeq,
       timestamp,
-      contractCalls: contractCalls as object[],
-      callGraph: callGraph as object,
+      contractCalls: contractCallsJson,
+      callGraph: callGraphJson,
       safetyScore,
       riskLevel,
       analysisStatus: 'completed',
@@ -69,23 +155,26 @@ async function analyzeAndPersist(
   });
 
   for (const p of patterns) {
+    const riskRating = p.details.riskRating;
     const dbPattern = await prismaWrite.compositionPattern.upsert({
       where: { name: p.patternName },
       update: {},
       create: {
+        id: randomUUID(),
         name: p.patternName,
         description: String(p.details.mitigationGuide ?? ''),
         category: p.category,
-        riskRating: (p.details as any).riskRating ?? 'medium_risk',
+        riskRating: typeof riskRating === 'string' ? riskRating : 'medium_risk',
         mitigationGuide: String(p.details.mitigationGuide ?? ''),
       },
     });
     await prismaWrite.compositionPatternInstance.create({
       data: {
+        id: randomUUID(),
         txId: composed.id,
         patternId: dbPattern.id,
         confidence: p.confidence,
-        details: p.details as object,
+        details: toJsonValue(p.details),
       },
     });
   }
@@ -104,6 +193,7 @@ async function analyzeAndPersist(
         lastAnalyzed: new Date(),
       },
       create: {
+        id: randomUUID(),
         contractId: addr,
         contractAddress: addr,
         compositionCount: 1,
@@ -128,12 +218,13 @@ async function analyzeAndPersist(
     const patch = generateMitigationPatch(contractCalls, patterns);
     await prismaWrite.compositionAlert.create({
       data: {
+        id: randomUUID(),
         txHash,
         severity: 'critical',
         title: `Exploit: ${exploit.exploitType}`,
         description: exploit.description ?? '',
         exploitDetected: true,
-        mitigationPatch: patch as object,
+        mitigationPatch: toJsonValue(patch),
       },
     });
     broadcastExploitAlert({
@@ -380,7 +471,7 @@ composabilityRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const tx = await prismaRead.composedTransaction.findUnique({
       where: { txHash: req.params.txHash },
-      include: { patterns: { include: { pattern: true } } },
+      include: { patternInstances: { include: { pattern: true } } },
     });
     if (!tx) return res.status(404).json({ error: 'Not found' });
     res.json(tx);
@@ -693,7 +784,7 @@ composabilityRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const pattern = await prismaRead.compositionPattern.findUnique({
       where: { id: req.params.id },
-      include: { instances: { take: 20, orderBy: { createdAt: 'desc' } } },
+      include: { patternInstances: { take: 20, orderBy: { createdAt: 'desc' } } },
     });
     if (!pattern) return res.status(404).json({ error: 'Not found' });
     res.json(pattern);
@@ -721,9 +812,15 @@ composabilityRouter.post(
         .parse(req.body);
       const pattern = await prismaWrite.compositionPattern.create({
         data: {
-          ...body,
-          detectionRules: (body.detectionRules as object) ?? undefined,
-          safeIf: (body.safeIf as object) ?? undefined,
+          id: randomUUID(),
+          name: body.name,
+          description: body.description,
+          category: body.category,
+          riskRating: body.riskRating,
+          requiredCalls: body.requiredCalls,
+          detectionRules: toJsonValue(body.detectionRules),
+          safeIf: toJsonValue(body.safeIf),
+          mitigationGuide: body.mitigationGuide,
         },
       });
       res.status(201).json(pattern);
@@ -774,22 +871,26 @@ composabilityRouter.post(
       const fns = contract?.functionSignatures as Array<{ name: string }> | null;
       const abi = contract?.abi as { functions?: Array<{ name: string }> } | null;
       const result = performStaticAnalysis(addr, fns, abi);
+      const callGraphJson = toCallGraphJson(result.callGraph);
+      const externalCallsJson = toJsonValue(result.externalCalls);
+      const circularDepsJson = toJsonValue(result.circularDeps);
 
       const saved = await prismaWrite.composabilityStaticAnalysis.upsert({
         where: { contractAddress: addr },
         update: {
-          externalCalls: result.externalCalls as object[],
-          callGraph: result.callGraph as object,
-          circularDeps: result.circularDeps as object[],
+          externalCalls: externalCallsJson,
+          callGraph: callGraphJson,
+          circularDeps: circularDepsJson,
           hasUnboundedRecursion: result.hasUnboundedRecursion,
           maxCallDepth: result.maxCallDepth,
           analyzedAt: new Date(),
         },
         create: {
+          id: randomUUID(),
           contractAddress: addr,
-          externalCalls: result.externalCalls as object[],
-          callGraph: result.callGraph as object,
-          circularDeps: result.circularDeps as object[],
+          externalCalls: externalCallsJson,
+          callGraph: callGraphJson,
+          circularDeps: circularDepsJson,
           hasUnboundedRecursion: result.hasUnboundedRecursion,
           maxCallDepth: result.maxCallDepth,
         },
@@ -888,6 +989,7 @@ composabilityRouter.post(
       const calls = (tx.contractCalls as unknown as ContractCall[]) ?? [];
       const callGraph = buildCallGraph(calls);
       const verification = verifyCompositionSafety(calls, callGraph);
+      const proofDataJson = toJsonValue(verification.proofData);
 
       const saved = await prismaWrite.composabilityVerification.upsert({
         where: { txHash: req.params.txHash },
@@ -903,10 +1005,11 @@ composabilityRouter.post(
           reentrancyScore: verification.scores.reentrancy,
           oracleScore: verification.scores.oracleFreshness,
           totalScore: verification.scores.total,
-          proofData: verification.proofData as object,
+          proofData: proofDataJson,
           verified: verification.verified,
         },
         create: {
+          id: randomUUID(),
           txHash: req.params.txHash,
           atomicity: verification.atomicity,
           authorization: verification.authorization,
@@ -919,7 +1022,7 @@ composabilityRouter.post(
           reentrancyScore: verification.scores.reentrancy,
           oracleScore: verification.scores.oracleFreshness,
           totalScore: verification.scores.total,
-          proofData: verification.proofData as object,
+          proofData: proofDataJson,
           verified: verification.verified,
         },
       });
@@ -1138,7 +1241,7 @@ composabilityRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const tx = await prismaRead.composedTransaction.findUnique({
       where: { txHash: req.params.txHash },
-      include: { patterns: { include: { pattern: true } } },
+      include: { patternInstances: { include: { pattern: true } } },
     });
     if (!tx) return res.status(404).json({ error: 'Not found' });
 
@@ -1155,7 +1258,7 @@ composabilityRouter.get(
       riskLevel: tx.riskLevel,
       callGraph: tx.callGraph,
       contractCalls: tx.contractCalls,
-      patterns: tx.patterns.map((pi) => ({
+      patterns: tx.patternInstances.map((pi) => ({
         name: pi.pattern.name,
         category: pi.pattern.category,
         confidence: pi.confidence,
@@ -1173,7 +1276,7 @@ composabilityRouter.get(
             verified: verification.verified,
           }
         : null,
-      recommendations: tx.patterns.map((pi) => pi.pattern.mitigationGuide).filter(Boolean),
+      recommendations: tx.patternInstances.map((pi) => pi.pattern.mitigationGuide).filter(Boolean),
       generatedAt: new Date().toISOString(),
     };
 
@@ -1256,6 +1359,7 @@ composabilityRouter.post(
       if (result.exploitDetected) {
         await prismaWrite.compositionAlert.create({
           data: {
+            id: randomUUID(),
             severity: 'critical',
             title: `Pending exploit: ${result.exploitType}`,
             description: result.description ?? '',
@@ -1353,7 +1457,7 @@ composabilityRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const tx = await prismaRead.composedTransaction.findUnique({
       where: { txHash: req.params.txHash },
-      include: { patterns: { include: { pattern: true } } },
+      include: { patternInstances: { include: { pattern: true } } },
     });
     if (!tx) return res.status(404).json({ error: 'Not found' });
     const calls = (tx.contractCalls as unknown as ContractCall[]) ?? [];
@@ -1362,11 +1466,12 @@ composabilityRouter.post(
 
     await prismaWrite.compositionAlert.create({
       data: {
+        id: randomUUID(),
         txHash: req.params.txHash,
         severity: 'high',
         title: 'Mitigation patch generated',
         description: `Auto-generated patch for ${patterns.length} detected pattern(s)`,
-        mitigationPatch: patch as object,
+        mitigationPatch: toJsonValue(patch),
       },
     });
     res.json({ txHash: req.params.txHash, patch });
@@ -1476,15 +1581,17 @@ composabilityRouter.post(
       const iterations = Math.min(500, parseInt((req.query.iterations as string) ?? '100', 10));
       const addr = req.params.contractAddress;
       const { findings, coverage } = runFuzzCampaign(addr, iterations);
+      const findingsJson = toJsonValue(findings);
 
       const campaign = await prismaWrite.composabilityFuzzCampaign.create({
         data: {
+          id: randomUUID(),
           contractAddress: addr,
           status: 'completed',
           totalCases: iterations,
           unsafeFound: findings.length,
           coveragePct: coverage,
-          findings: findings as object[],
+          findings: findingsJson,
           completedAt: new Date(),
         },
       });
@@ -1703,9 +1810,15 @@ composabilityRouter.post(
         .parse(req.body);
       const exploit = await prismaWrite.composabilityExploit.create({
         data: {
-          ...body,
+          id: randomUUID(),
+          title: body.title,
+          description: body.description,
+          patternCategory: body.patternCategory,
+          severity: body.severity,
+          cveId: body.cveId,
           affectedContracts: body.affectedContracts ?? [],
           exploitTxHashes: body.exploitTxHashes ?? [],
+          advisoryUrl: body.advisoryUrl,
         },
       });
       res.status(201).json(exploit);
@@ -1766,6 +1879,7 @@ composabilityRouter.get(
 
     const snapshot = await prismaWrite.ecosystemComposabilityIndex.create({
       data: {
+        id: randomUUID(),
         score,
         compositionDiversity: uniqueCategories,
         avgSafetyScore: avgScore._avg.safetyScore ?? 0,
@@ -2015,13 +2129,12 @@ composabilityRouter.post(
       // Store alert subscription in CompositionAlert as a subscription marker
       const alert = await prismaWrite.compositionAlert.create({
         data: {
+          id: randomUUID(),
           contractAddress: body.contractAddress,
           severity: body.severity ?? 'high',
           title: 'Alert subscription created',
           description: `Subscribed to composability alerts${body.contractAddress ? ` for ${body.contractAddress}` : ''}`,
-          mitigationPatch: body.webhookUrl
-            ? ({ webhookUrl: body.webhookUrl } as object)
-            : undefined,
+          mitigationPatch: body.webhookUrl ? { webhookUrl: body.webhookUrl } : undefined,
         },
       });
       res.status(201).json({
