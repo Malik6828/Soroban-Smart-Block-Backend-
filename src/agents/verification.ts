@@ -1,5 +1,6 @@
 import crypto from 'crypto';
-import { prismaWrite, prismaRead } from '../db';
+import { agentRead, agentWrite } from './store';
+import type { AgentExecutionRow } from './store';
 import { agentEngine } from './engine';
 import { logger } from '../logger';
 
@@ -35,12 +36,12 @@ class AgentVerificationNetwork {
       throw new Error(`Invalid verifier signature from ${params.verifierNode}`);
     }
 
-    await prismaWrite.agentVerification.create({
+    await agentWrite.agentVerification.create({
       data: {
         executionId: params.executionId,
         verifierNode: params.verifierNode,
         status: params.status,
-        discrepancy: params.discrepancy ? { message: params.discrepancy } : (null as any),
+        discrepancy: params.discrepancy ? { message: params.discrepancy } : null,
         signature: params.signature,
         verifiedAt: new Date(),
       },
@@ -54,7 +55,7 @@ class AgentVerificationNetwork {
     executionId: string,
     verifierNode: string,
   ): Promise<VerificationResult> {
-    const execution = await prismaRead.agentExecution.findUnique({
+    const execution = await agentRead.agentExecution.findUnique({
       where: { id: executionId },
       include: { agent: true },
     });
@@ -91,9 +92,7 @@ class AgentVerificationNetwork {
     return verificationResult;
   }
 
-  private async replayExecution(
-    execution: Record<string, unknown>,
-  ): Promise<{ expectedHash: string }> {
+  private async replayExecution(execution: AgentExecutionRow): Promise<{ expectedHash: string }> {
     const trace = (execution.trace as Record<string, unknown>) || {};
     const inputState = (execution.inputState as Record<string, unknown>) || {};
     const steps = (trace.steps as Array<Record<string, unknown>>) || [];
@@ -110,7 +109,7 @@ class AgentVerificationNetwork {
   }
 
   private async checkVerificationThreshold(executionId: string): Promise<void> {
-    const verifications = await prismaRead.agentVerification.findMany({
+    const verifications = await agentRead.agentVerification.findMany({
       where: { executionId },
     });
 
@@ -120,7 +119,7 @@ class AgentVerificationNetwork {
 
       const isVerified = verified > flagged;
 
-      await prismaWrite.agentExecution.update({
+      await agentWrite.agentExecution.update({
         where: { id: executionId },
         data: {
           isVerified,
@@ -132,7 +131,7 @@ class AgentVerificationNetwork {
 
       if (flagged > 0) {
         const agentId = (
-          await prismaRead.agentExecution.findUnique({
+          await agentRead.agentExecution.findUnique({
             where: { id: executionId },
             select: { agentId: true },
           })
@@ -150,7 +149,7 @@ class AgentVerificationNetwork {
   }
 
   async getVerificationStatus(executionId: string) {
-    const execution = await prismaRead.agentExecution.findUnique({
+    const execution = await agentRead.agentExecution.findUnique({
       where: { id: executionId },
       select: {
         id: true,
@@ -163,7 +162,7 @@ class AgentVerificationNetwork {
       },
     });
 
-    const verifications = await prismaRead.agentVerification.findMany({
+    const verifications = await agentRead.agentVerification.findMany({
       where: { executionId },
       orderBy: { createdAt: 'desc' },
     });
@@ -177,7 +176,7 @@ class AgentVerificationNetwork {
   }
 
   async getVerificationSummary(agentId: string) {
-    const executions = await prismaRead.agentExecution.findMany({
+    const executions = await agentRead.agentExecution.findMany({
       where: { agentId },
       select: {
         id: true,

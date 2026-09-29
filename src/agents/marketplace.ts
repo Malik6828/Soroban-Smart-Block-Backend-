@@ -1,4 +1,5 @@
-import { prismaRead, prismaWrite } from '../db';
+import { agentRead, agentWrite } from './store';
+import type { AgentRowWithCounts } from './store';
 import { agentTemplates, seedTemplates } from './templates';
 import { agentEngine } from './engine';
 import type { CapabilityToken, ResourceLimits } from './types';
@@ -35,20 +36,20 @@ class AgentMarketplace {
     }
 
     const [templates, total] = await Promise.all([
-      prismaRead.agentTemplate.findMany({
-        where: where as Record<string, unknown>,
+      agentRead.agentTemplate.findMany({
+        where,
         orderBy: { downloadCount: 'desc' },
         skip: ((params.page || 1) - 1) * (params.limit || 20),
         take: params.limit || 20,
       }),
-      prismaRead.agentTemplate.count({ where: where as Record<string, unknown> }),
+      agentRead.agentTemplate.count({ where }),
     ]);
 
     return { templates, total, page: params.page || 1, limit: params.limit || 20 };
   }
 
   async getTemplate(templateId: string) {
-    const template = await prismaRead.agentTemplate.findUnique({
+    const template = await agentRead.agentTemplate.findUnique({
       where: { id: templateId },
     });
     if (!template) throw new Error(`Template ${templateId} not found`);
@@ -78,8 +79,8 @@ class AgentMarketplace {
     if (params.status) where.status = params.status;
 
     const [agents, total] = await Promise.all([
-      prismaRead.agent.findMany({
-        where: where as Record<string, unknown>,
+      agentRead.agent.findMany<AgentRowWithCounts>({
+        where,
         orderBy: { createdAt: 'desc' },
         skip: ((params.page || 1) - 1) * (params.limit || 20),
         take: params.limit || 20,
@@ -92,14 +93,14 @@ class AgentMarketplace {
           },
         },
       }),
-      prismaRead.agent.count({ where: where as Record<string, unknown> }),
+      agentRead.agent.count({ where }),
     ]);
 
     return { agents, total, page: params.page || 1, limit: params.limit || 20 };
   }
 
   async getAgentDetail(agentId: string) {
-    const agent = await prismaRead.agent.findUnique({
+    const agent = await agentRead.agent.findUnique<AgentRowWithCounts>({
       where: { id: agentId },
       include: {
         _count: {
@@ -129,7 +130,7 @@ class AgentMarketplace {
       resourceLimits?: Partial<ResourceLimits>;
     },
   ) {
-    const agent = await prismaRead.agent.findUnique({ where: { id: agentId } });
+    const agent = await agentRead.agent.findUnique({ where: { id: agentId } });
     if (!agent) throw new Error(`Agent ${agentId} not found`);
     if (agent.ownerAddress !== ownerAddress) {
       throw new Error('Only the agent owner can update configuration');
@@ -142,25 +143,25 @@ class AgentMarketplace {
     if (updates.permissions) data.permissions = updates.permissions;
     if (updates.resourceLimits) {
       data.resourceLimits = {
-        ...(agent.resourceLimits as Record<string, unknown>),
+        ...(agent.resourceLimits as Partial<ResourceLimits>),
         ...updates.resourceLimits,
       };
     }
 
-    return prismaWrite.agent.update({
+    return agentWrite.agent.update({
       where: { id: agentId },
       data,
     });
   }
 
   async deleteAgent(agentId: string, ownerAddress: string): Promise<void> {
-    const agent = await prismaRead.agent.findUnique({ where: { id: agentId } });
+    const agent = await agentRead.agent.findUnique({ where: { id: agentId } });
     if (!agent) throw new Error(`Agent ${agentId} not found`);
     if (agent.ownerAddress !== ownerAddress) {
       throw new Error('Only the agent owner can delete an agent');
     }
 
-    await prismaWrite.agent.update({
+    await agentWrite.agent.update({
       where: { id: agentId },
       data: { status: 'archived' },
     });
@@ -170,7 +171,7 @@ class AgentMarketplace {
     const days = params.days || 30;
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    const agents = await prismaRead.agent.findMany({
+    const agents = await agentRead.agent.findMany<AgentRowWithCounts>({
       where: {
         createdAt: { gte: since },
         ...(params.category
@@ -186,7 +187,7 @@ class AgentMarketplace {
       },
     });
 
-    const executions = await prismaRead.agentExecution.findMany({
+    const executions = await agentRead.agentExecution.findMany({
       where: { createdAt: { gte: since } },
     });
 
@@ -250,7 +251,7 @@ class AgentMarketplace {
   }
 
   private async incrementDownloads(templateId: string): Promise<void> {
-    await prismaWrite.agentTemplate.update({
+    await agentWrite.agentTemplate.update({
       where: { id: templateId },
       data: { downloadCount: { increment: 1 } },
     });
