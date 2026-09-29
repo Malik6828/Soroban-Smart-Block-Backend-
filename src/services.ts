@@ -33,6 +33,8 @@ import { feedOrchestrator } from './feed/orchestrator';
 import { eventBus } from './events/eventBus';
 import { startGraphqlEventBridge } from './graphql/subscriptions';
 import { featureFlags } from './feature-flags';
+import { startWebhookDeliveryWorker } from './webhooks/dispatcher';
+import { startGasAnalyticsScheduler } from './indexer/gasAnalytics';
 
 export async function initializeServices(disabledServices: string[]): Promise<void> {
   await initRateLimitStore();
@@ -47,6 +49,12 @@ export async function initializeServices(disabledServices: string[]): Promise<vo
   await prisma.$connect();
   dbConnectionStatus.set(1);
   markReady('db');
+
+  try {
+    startWebhookDeliveryWorker();
+  } catch (err) {
+    logger.error('[webhooks] Delivery worker failed to start', { error: String(err) });
+  }
 
   try {
     const { getLatestLedger } = await import('./indexer/rpc');
@@ -121,6 +129,17 @@ export async function initializeServices(disabledServices: string[]): Promise<vo
     } else {
       disabledServices.push('feeAggregator (schema unavailable)');
       logger.debug('Fee aggregator disabled (required tables missing)');
+    }
+
+    if (featureFlags.shouldStartSync('gasFeeAlerts')) {
+      try {
+        startGasAnalyticsScheduler();
+        logger.info('Gas fee alert snapshot evaluator started');
+      } catch (err) {
+        logger.error('Gas fee alert snapshot evaluator failed to start', { error: String(err) });
+      }
+    } else {
+      disabledServices.push('gasFeeAlerts (flag off or schema unavailable)');
     }
 
     try {

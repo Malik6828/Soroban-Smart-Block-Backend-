@@ -307,6 +307,52 @@ model ContractNetwork {
   @@map("_contract_networks")
 }
 
+/// Community-submitted ABI and metadata awaiting moderation and publication.
+model ContractAbiSubmission {
+  id            String    @map("id") @id @default(cuid())
+  address       String    @map("address") @db.VarChar(56)
+  network       String    @map("network") @db.VarChar(32)
+  submittedBy   String    @map("submitted_by") @db.VarChar(128)
+  payload       Json      @map("payload")
+  contentHash   String    @map("content_hash") @db.VarChar(64)
+  status        String    @map("status") @default("pending")
+  validatedAt   DateTime  @map("validated_at")
+  validationLedger Int    @map("validation_ledger")
+  reviewNote    String?   @map("review_note")
+  reviewedBy    String?   @map("reviewed_by")
+  reviewedAt    DateTime? @map("reviewed_at")
+  publishedAt   DateTime? @map("published_at")
+  createdAt     DateTime  @map("created_at") @default(now())
+  updatedAt     DateTime  @map("updated_at") @updatedAt
+
+  events ContractAbiSubmissionEvent[]
+
+  @@unique(
+    [address, network, submittedBy, contentHash],
+    name: "address_network_submitter_content",
+    map: "_contract_abi_submissions_address_network_submitter_content_key"
+  )
+  @@index([status, createdAt])
+  @@index([address, network])
+  @@map("_contract_abi_submissions")
+}
+
+/// Append-only record of each moderation state transition.
+model ContractAbiSubmissionEvent {
+  id           String   @map("id") @id @default(cuid())
+  submissionId String   @map("submission_id")
+  fromStatus   String?  @map("from_status")
+  toStatus     String   @map("to_status")
+  actor        String   @map("actor")
+  reason       String?  @map("reason")
+  createdAt    DateTime @map("created_at") @default(now())
+
+  submission ContractAbiSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, createdAt])
+  @@map("_contract_abi_submission_events")
+}
+
 model VerificationRun {
   id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address")
@@ -1029,6 +1075,46 @@ model AlertConfiguration {
   @@index([contractAddress])
   @@index([alertType, isActive])
   @@map("_alert_configurations")
+}
+
+model GasFeeAlertRule {
+  id                      String    @map("id") @id @default(cuid())
+  developerId             String    @map("developer_id") @db.VarChar(128)
+  network                 String    @db.VarChar(16)
+  direction               String    @db.VarChar(8)
+  thresholdStroops        String    @map("threshold_stroops") @db.VarChar(78)
+  cooldownSeconds         Int       @map("cooldown_seconds") @default(900)
+  isActive                Boolean   @map("is_active") @default(true)
+  lastObservedFeeStroops   String?   @map("last_observed_fee_stroops") @db.VarChar(78)
+  lastEvaluatedAt         DateTime? @map("last_evaluated_at")
+  lastTriggeredAt         DateTime? @map("last_triggered_at")
+  createdAt               DateTime  @map("created_at") @default(now())
+  updatedAt               DateTime  @map("updated_at") @updatedAt
+
+  @@index([developerId, network, isActive])
+  @@index([network, isActive])
+  @@map("_gas_fee_alert_rules")
+}
+
+model GasFeeAlertEvent {
+  id                     String    @map("id") @id @default(cuid())
+  eventKey               String    @unique @map("event_key") @db.VarChar(256)
+  ruleId                 String    @map("rule_id") @db.VarChar(128)
+  developerId            String    @map("developer_id") @db.VarChar(128)
+  network                String    @db.VarChar(16)
+  direction              String    @db.VarChar(8)
+  thresholdStroops       String    @map("threshold_stroops") @db.VarChar(78)
+  previousFeeStroops     String    @map("previous_fee_stroops") @db.VarChar(78)
+  currentFeeStroops      String    @map("current_fee_stroops") @db.VarChar(78)
+  trend                  String    @db.VarChar(8)
+  bucketStart            DateTime  @map("bucket_start")
+  bucketEnd              DateTime  @map("bucket_end")
+  dispatchedAt           DateTime? @map("dispatched_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([ruleId, bucketStart])
+  @@map("_gas_fee_alert_events")
 }
 
 model IncidentReport {
@@ -2668,6 +2754,7 @@ model GasAnalyticsSnapshot {
   medianFee Float? @map("median_fee")
   peakFee Float? @map("peak_fee")
   minFee Float? @map("min_fee")
+  feeSumStroops String @map("fee_sum_stroops") @db.VarChar(78) @default("0")
   txCount Int @map("tx_count")
   createdAt DateTime @map("created_at") @default(now())
 
@@ -3799,6 +3886,8 @@ model WebhookDelivery {
   id String @map("id") @id
   subscriptionId String @map("subscription_id")
   eventId String? @map("event_id")
+  batchPayload Json? @map("batch_payload")
+  idempotencyKey String? @unique(map: "_webhook_deliveries_idempotency_key_key") @map("idempotency_key")
   attempt Int? @map("attempt")
   status String? @map("status")
   processingStatus String @map("processing_status") @default("idle") // "idle" | "processing" | "done"
@@ -3806,12 +3895,14 @@ model WebhookDelivery {
   httpStatus Int? @map("http_status")
   responseBody String? @map("response_body")
   errorMsg String? @map("error_msg")
+  errorCode String? @map("error_code")
   deliveredAt DateTime? @map("delivered_at")
   nextRetryAt DateTime? @map("next_retry_at")
   expiresAt DateTime? @map("expires_at")
   createdAt DateTime @map("created_at") @default(now())
 
   subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  outboxEvents WebhookOutboxEvent[]
 
   @@index([subscriptionId])
   @@index([expiresAt])
@@ -3830,6 +3921,9 @@ model WebhookSubscription {
   active Boolean @map("active") @default(true)
   storeResponseBody Boolean @map("store_response_body") @default(true)
   responseRetentionDays Int @map("response_retention_days") @default(90)
+  deliveryStrategy String @map("delivery_strategy") @default("immediate")
+  batchSize Int @map("batch_size") @default(100)
+  batchWindowMs Int @map("batch_window_ms") @default(50)
 
   // Challenge/response verification state. `verificationToken` is the
   // SHA-256 digest of the in-flight challenge (never the plaintext) so a
@@ -3843,9 +3937,35 @@ model WebhookSubscription {
   updatedAt DateTime @map("updated_at") @updatedAt
 
   delivery WebhookDelivery[]
+  outboxEvents WebhookOutboxEvent[]
 
   @@index([apiKeyId])
   @@map("_webhook_subscriptions")
+}
+
+model WebhookOutboxEvent {
+  id String @map("id") @id
+  subscriptionId String @map("subscription_id")
+  eventId String @map("event_id")
+  eventPayload Json @map("event_payload")
+  entityKey String @map("entity_key")
+  ledgerSequence Int @map("ledger_sequence")
+  transactionHash String @map("transaction_hash")
+  status String @default("pending")
+  batchDeliveryId String? @map("batch_delivery_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @map("created_at") @default(now())
+  updatedAt DateTime @map("updated_at") @updatedAt
+
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  batchDelivery WebhookDelivery? @relation(fields: [batchDeliveryId], references: [id], onDelete: SetNull)
+
+  @@unique([subscriptionId, eventId])
+  @@index([subscriptionId, status, createdAt])
+  @@index([subscriptionId, entityKey, status, ledgerSequence, transactionHash, eventId], map: "_webhook_outbox_order_idx")
+  @@index([batchDeliveryId])
+  @@index([expiresAt])
+  @@map("_webhook_outbox_events")
 }
 
 model YieldDistribution {

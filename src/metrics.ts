@@ -1,4 +1,5 @@
 import { Registry, Counter, Histogram, Gauge, collectDefaultMetrics } from 'prom-client';
+import { metrics as otelMetrics } from '@opentelemetry/api';
 
 export const registry = new Registry();
 
@@ -28,6 +29,133 @@ export const httpErrorsTotal = new Counter({
   labelNames: ['code', 'severity', 'route'],
   registers: [registry],
 });
+
+export const contractAbiSubmissionOperations = new Counter({
+  name: 'contract_abi_submission_operations_total',
+  help: 'Contract ABI submission workflow operations by operation and outcome',
+  labelNames: ['operation', 'outcome'],
+  registers: [registry],
+});
+
+export const gasFeeAlertApiOperations = new Counter({
+  name: 'gas_fee_alert_api_operations_total',
+  help: 'Gas fee alert API operations by operation and outcome',
+  labelNames: ['operation', 'outcome'],
+  registers: [registry],
+});
+export const gasFeeAlertApiOperationsOtel = gasFeeAlertMeter.createCounter(
+  'gas.fee_alert.api.operations',
+);
+export const gasFeeAlertOutboxOperations = new Counter({
+  name: 'gas_fee_alert_outbox_operations_total',
+  help: 'Gas fee alert outbox enqueue outcomes',
+  labelNames: ['outcome'],
+  registers: [registry],
+});
+export const gasFeeAlertOutboxOperationsOtel = gasFeeAlertMeter.createCounter(
+  'gas.fee_alert.outbox.operations',
+);
+export const gasFeeAlertDeliveryOperations = new Counter({
+  name: 'gas_fee_alert_delivery_operations_total',
+  help: 'Gas fee alert event delivery enqueue outcomes',
+  labelNames: ['outcome'],
+  registers: [registry],
+});
+export const gasFeeAlertDeliveryOperationsOtel = gasFeeAlertMeter.createCounter(
+  'gas.fee_alert.delivery.operations',
+);
+export const gasFeeAlertEvaluatorOperations = new Counter({
+  name: 'gas_fee_alert_evaluator_operations_total',
+  help: 'Gas fee alert snapshot evaluation outcomes',
+  labelNames: ['outcome'],
+  registers: [registry],
+});
+export const gasFeeAlertEvaluatorOperationsOtel = gasFeeAlertMeter.createCounter(
+  'gas.fee_alert.evaluator.operations',
+);
+export const gasFeeAlertDeliveryAttempts = new Counter({
+  name: 'gas_fee_alert_delivery_attempts_total',
+  help: 'Gas fee alert webhook attempts by bounded outcome',
+  labelNames: ['outcome'],
+  registers: [registry],
+});
+export const gasFeeAlertDeliveryAttemptsOtel = gasFeeAlertMeter.createCounter(
+  'gas.fee_alert.delivery.attempts',
+);
+export const gasFeeAlertEventToDeliverySeconds = new Histogram({
+  name: 'gas_fee_alert_event_to_delivery_seconds',
+  help: 'Elapsed time from completed fee-bucket end to successful gas alert webhook delivery',
+  buckets: [0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 300],
+  registers: [registry],
+});
+export const gasFeeAlertEventToDeliveryOtel = gasFeeAlertMeter.createHistogram(
+  'gas.fee_alert.event_to_delivery',
+  { unit: 's' },
+);
+
+export const contractAbiSubmissionValidationDuration = new Histogram({
+  name: 'contract_abi_submission_validation_duration_seconds',
+  help: 'Time to validate submitted ABI functions against indexed contract activity',
+  buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
+  registers: [registry],
+});
+
+// ── Webhook batch delivery ───────────────────────────────────────────────────
+export const webhookBatchOperationsTotal = new Counter({
+  name: 'webhook_batch_operations_total',
+  help: 'Webhook batch queue and delivery outcomes',
+  labelNames: ['operation', 'outcome'],
+  registers: [registry],
+});
+
+export const webhookBatchEvents = new Histogram({
+  name: 'webhook_batch_events',
+  help: 'Number of events in a dispatched webhook batch',
+  buckets: [1, 2, 5, 10, 25, 50, 100, 250, 500],
+  registers: [registry],
+});
+
+export const webhookDeliveryDurationSeconds = new Histogram({
+  name: 'webhook_delivery_duration_seconds',
+  help: 'Webhook destination request duration in seconds by delivery mode',
+  labelNames: ['mode'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [registry],
+});
+
+export const webhookEventToDeliverySeconds = new Histogram({
+  name: 'webhook_event_to_delivery_seconds',
+  help: 'Elapsed time from event ledger close to successful webhook delivery',
+  labelNames: ['mode'],
+  buckets: [0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+  registers: [registry],
+});
+
+const webhookMeter = otelMetrics.getMeter('soroban-webhook-delivery');
+export const webhookBatchOperationsOtel = webhookMeter.createCounter('webhook.batch.operations');
+export const webhookBatchEventsOtel = webhookMeter.createHistogram('webhook.batch.events');
+export const webhookDeliveryDurationOtel = webhookMeter.createHistogram(
+  'webhook.delivery.duration',
+  { unit: 's' },
+);
+export const webhookEventToDeliveryOtel = webhookMeter.createHistogram(
+  'webhook.event_to_delivery',
+  { unit: 's' },
+);
+let webhookOutboxDepthValue = 0;
+export const webhookOutboxDepth = new Gauge({
+  name: 'webhook_outbox_events',
+  help: 'Pending or in-flight durable webhook outbox events',
+  registers: [registry],
+});
+webhookMeter
+  .createObservableGauge('webhook.outbox.events')
+  .addCallback((observable) => observable.observe(webhookOutboxDepthValue));
+
+export function setWebhookOutboxDepth(value: number): void {
+  webhookOutboxDepthValue = Math.max(0, value);
+  webhookOutboxDepth.set(webhookOutboxDepthValue);
+}
 
 // ── 5xx Error Surge Alerting ─────────────────────────────────────────────────
 export const http5xxSurge = new Gauge({

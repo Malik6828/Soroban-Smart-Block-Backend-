@@ -25,6 +25,11 @@ vi.mock('../../src/scheduler/cron-scheduler', () => ({
   scheduler: { register: vi.fn(), stop: vi.fn() },
 }));
 
+vi.mock('../../src/config', () => ({ config: { stellarNetwork: 'testnet' } }));
+vi.mock('../../src/feature-flags', () => ({
+  featureFlags: { shouldStartSync: vi.fn().mockReturnValue(false) },
+}));
+
 import { runGasAnalytics, startGasAnalyticsScheduler } from '../../src/indexer/gasAnalytics';
 import { scheduler } from '../../src/scheduler/cron-scheduler';
 
@@ -67,6 +72,7 @@ describe('runGasAnalytics', () => {
     expect(call.create.peakFee).toBe(300);
     expect(call.create.minFee).toBe(100);
     expect(call.create.txCount).toBe(3);
+    expect(call.create.feeSumStroops).toBe('600');
   });
 
   it('skips non-finite fee values', async () => {
