@@ -37,6 +37,62 @@ export const contractAbiSubmissionOperations = new Counter({
   registers: [registry],
 });
 
+export const gasFeeAlertApiOperations = new Counter({
+  name: 'gas_fee_alert_api_operations_total',
+  help: 'Gas fee alert API operations by operation and outcome',
+  labelNames: ['operation', 'outcome'],
+  registers: [registry],
+});
+export const gasFeeAlertApiOperationsOtel = gasFeeAlertMeter.createCounter(
+  'gas.fee_alert.api.operations',
+);
+export const gasFeeAlertOutboxOperations = new Counter({
+  name: 'gas_fee_alert_outbox_operations_total',
+  help: 'Gas fee alert outbox enqueue outcomes',
+  labelNames: ['outcome'],
+  registers: [registry],
+});
+export const gasFeeAlertOutboxOperationsOtel = gasFeeAlertMeter.createCounter(
+  'gas.fee_alert.outbox.operations',
+);
+export const gasFeeAlertDeliveryOperations = new Counter({
+  name: 'gas_fee_alert_delivery_operations_total',
+  help: 'Gas fee alert event delivery enqueue outcomes',
+  labelNames: ['outcome'],
+  registers: [registry],
+});
+export const gasFeeAlertDeliveryOperationsOtel = gasFeeAlertMeter.createCounter(
+  'gas.fee_alert.delivery.operations',
+);
+export const gasFeeAlertEvaluatorOperations = new Counter({
+  name: 'gas_fee_alert_evaluator_operations_total',
+  help: 'Gas fee alert snapshot evaluation outcomes',
+  labelNames: ['outcome'],
+  registers: [registry],
+});
+export const gasFeeAlertEvaluatorOperationsOtel = gasFeeAlertMeter.createCounter(
+  'gas.fee_alert.evaluator.operations',
+);
+export const gasFeeAlertDeliveryAttempts = new Counter({
+  name: 'gas_fee_alert_delivery_attempts_total',
+  help: 'Gas fee alert webhook attempts by bounded outcome',
+  labelNames: ['outcome'],
+  registers: [registry],
+});
+export const gasFeeAlertDeliveryAttemptsOtel = gasFeeAlertMeter.createCounter(
+  'gas.fee_alert.delivery.attempts',
+);
+export const gasFeeAlertEventToDeliverySeconds = new Histogram({
+  name: 'gas_fee_alert_event_to_delivery_seconds',
+  help: 'Elapsed time from completed fee-bucket end to successful gas alert webhook delivery',
+  buckets: [0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 300],
+  registers: [registry],
+});
+export const gasFeeAlertEventToDeliveryOtel = gasFeeAlertMeter.createHistogram(
+  'gas.fee_alert.event_to_delivery',
+  { unit: 's' },
+);
+
 export const contractAbiSubmissionValidationDuration = new Histogram({
   name: 'contract_abi_submission_validation_duration_seconds',
   help: 'Time to validate submitted ABI functions against indexed contract activity',

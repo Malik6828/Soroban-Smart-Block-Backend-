@@ -10,6 +10,10 @@ import {
   webhookDeliveryDurationSeconds,
   webhookEventToDeliveryOtel,
   webhookEventToDeliverySeconds,
+  gasFeeAlertDeliveryAttempts,
+  gasFeeAlertDeliveryAttemptsOtel,
+  gasFeeAlertEventToDeliveryOtel,
+  gasFeeAlertEventToDeliverySeconds,
   setWebhookOutboxDepth,
 } from '../metrics';
 import { processResponseBody } from './redaction';
@@ -18,6 +22,7 @@ import { signWebhookBody } from './webhookVerify';
 import { logger } from '../logger';
 import { uuidv7 } from '../utils/uuidv7';
 import { cleanupAllExpiredWebhookDeliveries } from './retention';
+import { enqueueGasFeeAlertDeliveries } from '../services/gasFeeAlertDelivery';
 import {
   createBatchIdempotencyKey,
   isBatchBodyWithinLimit,
@@ -43,6 +48,25 @@ export const DISPATCH_CONCURRENCY = boundedIntegerSetting('WEBHOOK_DISPATCH_CONC
 export function backoffMs(attempt: number): number {
   // 10s, 30s, 90s, 270s, 810s — capped at 15 min
   return Math.min(10_000 * 3 ** (attempt - 1), 900_000);
+}
+
+function recordGasFeeAlertDeliveryOutcome(
+  idempotencyKey: string | null,
+  outcome: 'success' | 'http_error' | 'network_error' | 'ssrf_blocked',
+  isGasFeeAlert: boolean,
+  occurredAt?: Date | string,
+): void {
+  if (!idempotencyKey || !isGasFeeAlert) return;
+  gasFeeAlertDeliveryAttempts.inc({ outcome });
+  gasFeeAlertDeliveryAttemptsOtel.add(1, { outcome });
+  if (outcome === 'success' && occurredAt) {
+    const occurredAtMs = new Date(occurredAt).getTime();
+    if (Number.isFinite(occurredAtMs)) {
+      const elapsedSeconds = Math.max(0, (Date.now() - occurredAtMs) / 1000);
+      gasFeeAlertEventToDeliverySeconds.observe(elapsedSeconds);
+      gasFeeAlertEventToDeliveryOtel.record(elapsedSeconds);
+    }
+  }
 }
 
 // ── Metrics (#483) ────────────────────────────────────────────────────────────
@@ -128,6 +152,21 @@ export interface WebhookPayload {
   ledgerCloseTime: Date;
   transactionHash: string;
 }
+
+interface GasFeeAlertWebhookPayload {
+  id: string;
+  eventType: 'gas_fee_alert';
+  network: string;
+  occurredAt: Date;
+  ruleId: string;
+  direction: string;
+  thresholdStroops: string;
+  previousFeeStroops: string;
+  currentFeeStroops: string;
+  trend: string;
+}
+
+type DeliveryPayload = WebhookPayload | GasFeeAlertWebhookPayload;
 
 // Maximum number of webhook subscriptions fetched per page when fanning out (#724)
 export const DISPATCH_PAGE_SIZE = boundedIntegerSetting('WEBHOOK_DISPATCH_PAGE_SIZE', 500, 2_000);
@@ -655,39 +694,60 @@ async function deliverOnce(
   storeResponseBody: boolean = true,
   responseRetentionDays: number = 90,
 ): Promise<void> {
-  let payload: WebhookPayload | null = event;
+  let payload: DeliveryPayload | null = event;
   let batchPayload: StoredBatchPayload | null = null;
   let eventId = event?.id ?? '';
+  let deliveryIdempotencyKey: string | null = null;
 
   if (!payload && deliveryId) {
     const row = await prismaRead.webhookDelivery.findUnique({ where: { id: deliveryId } });
     if (!row) return;
+    deliveryIdempotencyKey = row.idempotencyKey ?? null;
     if (row.batchPayload) {
       batchPayload = row.batchPayload as unknown as StoredBatchPayload;
     } else {
       eventId = row.eventId ?? '';
       const ev = await prismaRead.event.findUnique({ where: { id: eventId } });
-      if (!ev) return;
-      payload = {
-        id: ev.id,
-        contractAddress: ev.contractAddress,
-        eventType: ev.eventType,
-        topicSymbol: ev.topicSymbol,
-        decoded: ev.decoded,
-        ledgerSequence: ev.ledgerSequence,
-        ledgerCloseTime: ev.ledgerCloseTime,
-        transactionHash: ev.transactionHash,
-      };
+      if (ev) {
+        payload = {
+          id: ev.id,
+          contractAddress: ev.contractAddress,
+          eventType: ev.eventType,
+          topicSymbol: ev.topicSymbol,
+          decoded: ev.decoded,
+          ledgerSequence: ev.ledgerSequence,
+          ledgerCloseTime: ev.ledgerCloseTime,
+          transactionHash: ev.transactionHash,
+        };
+      } else {
+        const gasEvent = await prismaRead.gasFeeAlertEvent.findUnique({ where: { id: eventId } });
+        if (!gasEvent) return;
+        payload = {
+          id: gasEvent.eventKey,
+          eventType: 'gas_fee_alert',
+          network: gasEvent.network,
+          occurredAt: gasEvent.bucketEnd,
+          ruleId: gasEvent.ruleId,
+          direction: gasEvent.direction,
+          thresholdStroops: gasEvent.thresholdStroops,
+          previousFeeStroops: gasEvent.previousFeeStroops,
+          currentFeeStroops: gasEvent.currentFeeStroops,
+          trend: gasEvent.trend,
+        };
+      }
     }
   }
 
   if (!payload && !batchPayload) return;
+  const isGasFeeAlert =
+    payload !== null && 'network' in payload && payload.eventType === 'gas_fee_alert';
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const body = batchPayload
     ? serializeWebhookBatch(batchPayload, attempt)
     : JSON.stringify({ event: payload, attempt });
   if (batchPayload) headers['Idempotency-Key'] = batchPayload.idempotencyKey;
+  else if (deliveryIdempotencyKey) headers['Idempotency-Key'] = deliveryIdempotencyKey;
 
   // Every subscription now has a secret (#481).
   // Use signWebhookBody for constant-time-safe signing and add X-Webhook-Timestamp
@@ -734,6 +794,7 @@ async function deliverOnce(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (err instanceof SsrfBlockedError) {
+      recordGasFeeAlertDeliveryOutcome(deliveryIdempotencyKey, 'ssrf_blocked', isGasFeeAlert);
       await prismaWrite.$transaction(async (tx) => {
         await tx.webhookDelivery.update({
           where: { id: delivery.id },
@@ -758,6 +819,7 @@ async function deliverOnce(
         webhookBatchOperationsOtel.add(1, { operation: 'delivery', outcome: 'ssrf_blocked' });
       }
     } else {
+      recordGasFeeAlertDeliveryOutcome(deliveryIdempotencyKey, 'network_error', isGasFeeAlert);
       const processedError = storeResponseBody ? processResponseBody(msg, 500, true) : null;
       await scheduleRetryOrFail(
         delivery.id,
@@ -814,13 +876,23 @@ async function deliverOnce(
           });
         }
       });
+      recordGasFeeAlertDeliveryOutcome(
+        deliveryIdempotencyKey,
+        'success',
+        isGasFeeAlert,
+        payload && 'occurredAt' in payload ? payload.occurredAt : undefined,
+      );
       if (batchPayload) {
         webhookBatchOperationsTotal.inc({ operation: 'delivery', outcome: 'success' });
         webhookBatchOperationsOtel.add(1, { operation: 'delivery', outcome: 'success' });
       }
-      const eventTimes = (batchPayload?.events ?? (payload ? [payload] : [])).map((item) =>
-        new Date(item.ledgerCloseTime).getTime(),
-      );
+      const eventTimes = (batchPayload?.events ?? (payload ? [payload] : []))
+        .map((item) =>
+          new Date(
+            String('ledgerCloseTime' in item ? item.ledgerCloseTime : item.occurredAt),
+          ).getTime(),
+        )
+        .filter(Number.isFinite);
       if (eventTimes.length > 0) {
         const eventToDeliverySeconds = Math.max(0, (Date.now() - Math.min(...eventTimes)) / 1000);
         const deliveryMode = batchPayload ? 'batch' : 'single';
@@ -843,6 +915,7 @@ async function deliverOnce(
       'HTTP_NON_2XX',
       batchPayload !== null,
     );
+    recordGasFeeAlertDeliveryOutcome(deliveryIdempotencyKey, 'http_error', isGasFeeAlert);
     if (batchPayload) {
       webhookBatchOperationsTotal.inc({ operation: 'delivery', outcome: 'http_error' });
       webhookBatchOperationsOtel.add(1, { operation: 'delivery', outcome: 'http_error' });
@@ -856,6 +929,7 @@ async function deliverOnce(
 
     // SSRF blocks on redirect are permanent failures — don't retry
     if (err instanceof SsrfBlockedError) {
+      recordGasFeeAlertDeliveryOutcome(deliveryIdempotencyKey, 'ssrf_blocked', isGasFeeAlert);
       await prismaWrite.$transaction(async (tx) => {
         await tx.webhookDelivery.update({
           where: { id: delivery.id },
@@ -882,6 +956,7 @@ async function deliverOnce(
       return;
     }
 
+    recordGasFeeAlertDeliveryOutcome(deliveryIdempotencyKey, 'network_error', isGasFeeAlert);
     const processedError = storeResponseBody ? processResponseBody(msg, 500, true) : null;
     await scheduleRetryOrFail(
       delivery.id,
@@ -1109,6 +1184,7 @@ export function startWebhookDeliveryWorker(): void {
     const task = (async () => {
       try {
         await flushPendingWebhookBatches();
+        await enqueueGasFeeAlertDeliveries();
         if (Date.now() - lastWebhookRetryAt >= 1_000) {
           await retryPendingDeliveries();
           lastWebhookRetryAt = Date.now();

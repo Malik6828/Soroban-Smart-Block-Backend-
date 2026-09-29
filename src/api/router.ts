@@ -77,6 +77,7 @@ import { rateLimitAdminRouter } from './rate-limits';
 import { alertsRouter } from './alerts';
 import { oracleIntelligenceRouter } from './oracle-intelligence';
 import { alertRulesRouter } from './alert-rules';
+import { gasFeeAlertsRouter } from './gas';
 
 // ── Saved Searches & Notifications ────────────────────────────────────────────
 import { savedSearchesRouter } from './saved-searches';
@@ -168,6 +169,7 @@ router.use('/admin', adminRateLimit);
 router.use('/admin/rate-limits', adminRateLimitsOverrideRateLimit, rateLimitAdminRouter);
 router.use('/admin/contract-abi-submissions', contractAbiSubmissionsAdminRouter);
 router.use('/market/alerts', alertsRouter);
+router.use('/gas', gasFeeAlertsRouter);
 router.use('/oracles/intelligence', oracleIntelligenceRouter);
 // Saved searches — auth is enforced inside savedSearchesRouter itself.
 router.use('/saved-searches', savedSearchesRouter);
