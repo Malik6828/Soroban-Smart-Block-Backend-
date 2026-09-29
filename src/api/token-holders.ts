@@ -8,7 +8,7 @@
 
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { prismaRead } from '../db';
+import { tokenHolderRead, type HolderSnapshot } from '../token-holders/store';
 import { asyncHandler } from '../middleware/asyncHandler';
 
 export const tokenHoldersRouter = Router();
@@ -59,7 +59,12 @@ tokenHoldersRouter.get(
     };
 
     const [holders, total] = await Promise.all([
-      prismaRead.tokenHolder.findMany({
+      tokenHolderRead.tokenHolder.findMany<
+        Pick<
+          HolderSnapshot,
+          'holderAddress' | 'balance' | 'percentage' | 'rank' | 'firstSeenAt' | 'lastUpdatedAt'
+        >
+      >({
         where,
         orderBy: { balanceRaw: 'desc' },
         take: limit,
@@ -73,7 +78,7 @@ tokenHoldersRouter.get(
           lastUpdatedAt: true,
         },
       }),
-      prismaRead.tokenHolder.count({ where }),
+      tokenHolderRead.tokenHolder.count({ where }),
     ]);
 
     res.json({
@@ -101,14 +106,16 @@ tokenHoldersRouter.get(
     const { address } = req.params;
     const { n } = z.object({ n: z.coerce.number().min(1).max(1000).default(100) }).parse(req.query);
 
-    const holders = await prismaRead.tokenHolder.findMany({
+    const holders = await tokenHolderRead.tokenHolder.findMany<
+      Pick<HolderSnapshot, 'holderAddress' | 'balance' | 'percentage'>
+    >({
       where: { contractAddress: address },
       orderBy: { balanceRaw: 'desc' },
       take: n,
       select: { holderAddress: true, balance: true, percentage: true },
     });
 
-    const totalHolders = await prismaRead.tokenHolder.count({
+    const totalHolders = await tokenHolderRead.tokenHolder.count({
       where: { contractAddress: address },
     });
 
@@ -137,7 +144,7 @@ tokenHoldersRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { address } = req.params;
 
-    const latest = await prismaRead.tokenConcentrationMetrics.findFirst({
+    const latest = await tokenHolderRead.tokenConcentrationMetrics.findFirst({
       where: { contractAddress: address },
       orderBy: { computedAt: 'desc' },
     });
@@ -158,7 +165,7 @@ tokenHoldersRouter.get(
     }
 
     // Compute on-the-fly if not cached
-    const holders = await prismaRead.tokenHolder.findMany({
+    const holders = await tokenHolderRead.tokenHolder.findMany({
       where: { contractAddress: address },
       orderBy: { balanceRaw: 'desc' },
       select: { balanceRaw: true, percentage: true },
@@ -202,7 +209,7 @@ tokenHoldersRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { address } = req.params;
 
-    const cohorts = await prismaRead.holderCohort.findMany({
+    const cohorts = await tokenHolderRead.holderCohort.findMany({
       where: { contractAddress: address },
       orderBy: { cohortStart: 'desc' },
       take: 12,
@@ -217,7 +224,7 @@ tokenHoldersRouter.get(
       },
     });
 
-    const holders = await prismaRead.tokenHolder.findMany({
+    const holders = await tokenHolderRead.tokenHolder.findMany({
       where: { contractAddress: address },
       select: { balanceRaw: true, firstSeenAt: true, lastUpdatedAt: true },
     });
@@ -298,7 +305,7 @@ tokenHoldersRouter.get(
     });
     const { limit, alertType, since } = schema.parse(req.query);
 
-    const alerts = await prismaRead.whaleAlert.findMany({
+    const alerts = await tokenHolderRead.whaleAlert.findMany({
       where: {
         contractAddress: address,
         ...(alertType ? { alertType } : {}),

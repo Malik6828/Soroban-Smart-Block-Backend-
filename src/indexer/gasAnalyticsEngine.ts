@@ -6,7 +6,7 @@
  * exposes the last-run timestamps for `/readyz` integration.
  */
 
-import { prismaRead, prismaWrite } from '../db';
+import { gasAnalyticsRead, gasAnalyticsWrite } from '../gas-analytics/store';
 
 // ── Staleness tracking (#879) ─────────────────────────────────────────────────
 
@@ -99,7 +99,7 @@ export async function indexTransactionGasData(
   const totalFeeNum = Number(feeCharged);
   const effectiveFeePerInstr = cpu > 0 ? String((totalFeeNum / cpu).toFixed(10)) : '0';
 
-  await prismaWrite.gasAnalytics.upsert({
+  await gasAnalyticsWrite.gasAnalytics.upsert({
     where: { txHash },
     create: {
       txHash,
@@ -137,7 +137,7 @@ export async function runGasAnomalyDetection(contractAddress: string): Promise<v
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 86400e3);
 
-  const recent = await prismaRead.gasAnalytics.findMany({
+  const recent = await gasAnalyticsRead.gasAnalytics.findMany({
     where: { contractAddress, ledgerCloseTime: { gte: sevenDaysAgo } },
     select: { totalFee: true, cpuInstructions: true, ledgerCloseTime: true, txHash: true },
     orderBy: { ledgerCloseTime: 'desc' },
@@ -154,7 +154,7 @@ export async function runGasAnomalyDetection(contractAddress: string): Promise<v
   const deviationPct = avg > 0 ? ((latestFee - avg) / avg) * 100 : 0;
 
   if (deviationPct > 50) {
-    await prismaWrite.gasAlert.create({
+    await gasAnalyticsWrite.gasAlert.create({
       data: {
         contractAddress,
         alertType: 'cost_spike',
@@ -173,7 +173,7 @@ export async function runGasAnomalyDetection(contractAddress: string): Promise<v
   if (stdDev > 0) {
     const zScore = Math.abs(latestFee - avg) / stdDev;
     if (zScore > 3) {
-      await prismaWrite.gasAlert.create({
+      await gasAnalyticsWrite.gasAlert.create({
         data: {
           contractAddress,
           alertType: 'anomaly',
@@ -195,7 +195,7 @@ export async function runGasAnomalyDetection(contractAddress: string): Promise<v
 }
 
 export async function generateOptimizationSuggestions(contractAddress: string): Promise<void> {
-  const rows = await prismaRead.gasAnalytics.findMany({
+  const rows = await gasAnalyticsRead.gasAnalytics.findMany({
     where: { contractAddress },
     orderBy: { ledgerCloseTime: 'desc' },
     take: 500,
@@ -273,17 +273,17 @@ export async function generateOptimizationSuggestions(contractAddress: string): 
 
     for (const s of suggestions) {
       const estimatedSavings = ((avgFee * s.savingsPct) / 100).toFixed(0);
-      const existing = await prismaRead.gasOptimizationSuggestion.findFirst({
+      const existing = await gasAnalyticsRead.gasOptimizationSuggestion.findFirst({
         where: { contractAddress, functionName, suggestionType: s.suggestionType },
         select: { id: true },
       });
       if (existing) {
-        await prismaWrite.gasOptimizationSuggestion.update({
+        await gasAnalyticsWrite.gasOptimizationSuggestion.update({
           where: { id: existing.id },
           data: { currentCost: avgFee.toFixed(0), estimatedSavings },
         });
       } else {
-        await prismaWrite.gasOptimizationSuggestion.create({
+        await gasAnalyticsWrite.gasOptimizationSuggestion.create({
           data: {
             contractAddress,
             functionName,
