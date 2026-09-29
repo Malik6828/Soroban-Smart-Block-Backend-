@@ -1748,11 +1748,14 @@ model DevApiKey {
   status String @map("status") @default("active")
   /// ID of the key that was rotated to produce this key, for audit-trail chaining (#888)
   rotatedFromKeyId String? @map("rotated_from_key_id")
+  tenantId String? @map("tenant_id")
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
 
-  developer    Developer     @relation(fields: [developerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  developer    Developer       @relation(fields: [developerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tenant       Tenant?         @relation(fields: [tenantId], references: [id])
   usageRecords UsageRecord[]
+  apiKeyScopes ApiKeyScope[]
 
   @@index([developerId])
   @@index([keyPrefix])
@@ -1760,6 +1763,7 @@ model DevApiKey {
   @@index([status])
   @@index([tier])
   @@index([expiresAt])
+  @@index([tenantId])
   @@map("_dev_api_keies")
 }
 
@@ -4934,14 +4938,19 @@ model WalletUser {
   isMultiSig  Boolean   @default(false)
   metadata    Json      @default("{}")
   lastLogin   DateTime?
+  tenantId    String?   @map("tenant_id")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  sessions AuthSession[]
-  events   AuthEvent[]
-  webhooks AuthWebhook[]
+  sessions        AuthSession[]
+  events          AuthEvent[]
+  webhooks        AuthWebhook[]
+  tenant          Tenant?           @relation(fields: [tenantId], references: [id])
+  userRoles       UserRole[]
+  userPermissions UserPermission[]
 
   @@index([address])
+  @@index([tenantId])
   @@map("wallet_users")
 }
 
@@ -5493,4 +5502,183 @@ model UsageQuota {
 
   @@index([developerId])
   @@map("_usage_quotas")
+}
+
+// ── RBAC Permission System ───────────────────────────────────────────────────
+
+// Core permission definitions
+model Permission {
+  id                  String    @id
+  resource            String
+  action              String
+  scope               String?
+  description         String?
+  conditions          Json      @default("[]")
+  isSystemPermission  Boolean   @map("is_system_permission") @default(false)
+  createdAt           DateTime  @map("created_at") @default(now())
+  updatedAt           DateTime  @map("updated_at") @updatedAt
+
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+  apiKeyScopes    ApiKeyScope[]
+
+  @@index([resource, action])
+  @@index([scope])
+  @@map("permissions")
+}
+
+// Role definitions with inheritance
+model Role {
+  id             String    @id
+  name           String
+  description    String?
+  inheritsFrom   String[]  @map("inherits_from") @default([])
+  isSystemRole   Boolean   @map("is_system_role") @default(false)
+  conditions     Json      @default("[]")
+  createdAt      DateTime  @map("created_at") @default(now())
+  updatedAt      DateTime  @map("updated_at") @updatedAt
+
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@index([name])
+  @@map("roles")
+}
+
+// Role-permission assignments
+model RolePermission {
+  roleId       String    @map("role_id")
+  permissionId String    @map("permission_id")
+  grantedBy    String?   @map("granted_by")
+  grantedAt    DateTime  @map("granted_at") @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// Multi-tenant support
+model Tenant {
+  id              String    @id
+  name            String
+  slug            String    @unique
+  parentTenantId  String?   @map("parent_tenant_id")
+  settings        Json      @default("{}")
+  isolationLevel  String    @map("isolation_level") @default("strict")
+  createdAt       DateTime  @map("created_at") @default(now())
+  updatedAt       DateTime  @map("updated_at") @updatedAt
+
+  parentTenant       Tenant?             @relation("TenantHierarchy", fields: [parentTenantId], references: [id])
+  childTenants       Tenant[]            @relation("TenantHierarchy")
+  users              WalletUser[]
+  apiKeys            DevApiKey[]
+  userRoles          UserRole[]
+  userPermissions    UserPermission[]
+  resourcePermissions ResourcePermission[]
+
+  @@index([slug])
+  @@index([parentTenantId])
+  @@map("tenants")
+}
+
+// User-role assignments (extends existing WalletUser)
+model UserRole {
+  userId     String    @map("user_id")
+  roleId     String    @map("role_id")
+  tenantId   String?   @map("tenant_id")
+  grantedBy  String?   @map("granted_by")
+  grantedAt  DateTime  @map("granted_at") @default(now())
+  expiresAt  DateTime? @map("expires_at")
+  conditions Json      @default("[]")
+
+  user   WalletUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  tenant Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId, tenantId])
+  @@index([userId, tenantId])
+  @@index([roleId])
+  @@index([expiresAt])
+  @@map("user_roles")
+}
+
+// Direct user permissions (for exceptions)
+model UserPermission {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  permissionId String    @map("permission_id")
+  tenantId     String?   @map("tenant_id")
+  resourceType String?   @map("resource_type")
+  resourceId   String?   @map("resource_id")
+  grantedBy    String?   @map("granted_by")
+  grantedAt    DateTime  @map("granted_at") @default(now())
+  expiresAt    DateTime? @map("expires_at")
+  conditions   Json      @default("[]")
+
+  user       WalletUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  tenant     Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tenantId])
+  @@index([permissionId])
+  @@index([resourceType, resourceId])
+  @@index([expiresAt])
+  @@map("user_permissions")
+}
+
+// Enhanced API key scopes
+model ApiKeyScope {
+  id                   String    @id @default(cuid())
+  apiKeyId             String    @map("api_key_id")
+  permissionId         String    @map("permission_id")
+  resourceRestrictions Json      @map("resource_restrictions") @default("[]")
+  conditions           Json      @default("[]")
+  createdAt            DateTime  @map("created_at") @default(now())
+
+  apiKey     DevApiKey  @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId])
+  @@index([permissionId])
+  @@map("api_key_scopes")
+}
+
+// Resource-level access control
+model ResourcePermission {
+  id            String    @id @default(cuid())
+  resourceType  String    @map("resource_type")
+  resourceId    String    @map("resource_id")
+  principalId   String    @map("principal_id")
+  principalType String    @map("principal_type")
+  permissions   String[]
+  grantedBy     String?   @map("granted_by")
+  grantedAt     DateTime  @map("granted_at") @default(now())
+  expiresAt     DateTime? @map("expires_at")
+  tenantId      String?   @map("tenant_id")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([resourceType, resourceId])
+  @@index([principalId, principalType])
+  @@index([tenantId])
+  @@index([expiresAt])
+  @@map("resource_permissions")
+}
+
+// Permission evaluation cache
+model PermissionCache {
+  cacheKey    String   @id @map("cache_key")
+  userId      String?  @map("user_id")
+  apiKeyId    String?  @map("api_key_id")
+  tenantId    String?  @map("tenant_id")
+  permissions Json
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @map("created_at") @default(now())
+
+  @@index([userId, tenantId])
+  @@index([apiKeyId, tenantId])
+  @@index([expiresAt])
+  @@map("permission_cache")
 }
