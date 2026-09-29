@@ -20,6 +20,7 @@
 
 import crypto from 'crypto';
 import axios from 'axios';
+import type { Prisma } from '@prisma/client';
 import { prismaRead, prismaWrite } from '../db';
 import { logger } from '../logger';
 import { cacheGet, cacheSet } from '../cache';
@@ -68,9 +69,37 @@ function scoreColor(s: number): number {
 
 // ── Fetch audit data for a contract ──────────────────────────────────────────
 
-async function fetchAuditSummary(contractAddress: string) {
+// Typed shape of {@link fetchAuditSummary}'s cache payload (issue #1099:
+// the previous `Record<string, unknown>` widened every consumer to `unknown`).
+interface AuditSummary {
+  cert: Prisma.AuditCertificateGetPayload<{
+    select: {
+      id: true;
+      version: true;
+      overallScore: true;
+      securityScore: true;
+      governanceScore: true;
+      economicScore: true;
+      complianceScore: true;
+      liquidityScore: true;
+      totalFindings: true;
+      criticalFindings: true;
+      highFindings: true;
+      openFindings: true;
+      certificateHash: true;
+      generatedAt: true;
+      expiresAt: true;
+      anchorTxHash: true;
+    };
+  }>;
+  contract: Prisma.ContractGetPayload<{
+    select: { name: true; tokenSymbol: true; isToken: true };
+  }> | null;
+}
+
+async function fetchAuditSummary(contractAddress: string): Promise<AuditSummary | null> {
   const cacheKey = `bot:audit:${contractAddress}`;
-  const cached = await cacheGet<Record<string, unknown>>(cacheKey);
+  const cached = await cacheGet<AuditSummary>(cacheKey);
   if (cached) return cached;
 
   const cert = await prismaRead.auditCertificate.findFirst({
@@ -103,7 +132,7 @@ async function fetchAuditSummary(contractAddress: string) {
     select: { name: true, tokenSymbol: true, isToken: true },
   });
 
-  const result = { cert, contract };
+  const result: AuditSummary = { cert, contract };
   await cacheSet(cacheKey, result, 120);
   return result;
 }
