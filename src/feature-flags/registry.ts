@@ -36,6 +36,13 @@ export interface FlagDefinition {
 
 export const FEATURE_FLAG_DEFINITIONS: FlagDefinition[] = [
   {
+    key: 'webhookBatchDelivery',
+    description:
+      'Durable, opt-in aggregated webhook deliveries with per-subscription windows and bounded batch sizes.',
+    requiredTables: ['_webhook_outbox_events'],
+    defaultEnabled: false,
+  },
+  {
     key: 'contractAbiSubmissions',
     description:
       'Community ABI submissions with admin moderation and publication into the contract registry.',

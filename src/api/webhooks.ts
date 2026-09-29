@@ -8,12 +8,15 @@ import { apiKeyAuth, requireApiKey } from '../middleware/apiKeyAuth';
 import { assertSafeUrl, safePost, SsrfBlockedError } from '../webhooks/ssrf-guard';
 import { uuidv7 } from '../utils/uuidv7';
 import { sensitiveReadLog } from '../middleware/sensitiveReadLog';
+import { featureFlags } from '../feature-flags';
+import { createBatchIdempotencyKey } from '../webhooks/batch-utils';
 import { signWebhookBody, TIMESTAMP_TOLERANCE_MS } from '../webhooks/webhookVerify';
 import {
   backoffMs,
   MAX_ATTEMPTS,
   REQUEST_TIMEOUT_MS,
   sendTestDelivery,
+  type WebhookPayload,
 } from '../webhooks/dispatcher';
 import {
   buildVerificationBody,
@@ -34,27 +37,40 @@ webhooksRouter.use(sensitiveReadLog('webhook_read', (req) => req.path));
 
 // Secret must be at least 32 characters to carry sufficient HMAC entropy (#481).
 const MIN_SECRET_LENGTH = 32;
+const webhookUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    const parsed = new URL(value);
+    return parsed.username.length === 0 && parsed.password.length === 0;
+  }, 'URL credentials are not allowed');
 
 // Placeholder address used in preview/ping payloads when the subscription does
 // not filter on a specific contract.
 const SAMPLE_CONTRACT_ADDRESS = `C${'A'.repeat(55)}`;
 
 const createSchema = z.object({
-  url: z.string().url(),
+  url: webhookUrlSchema,
   secret: z.string().min(MIN_SECRET_LENGTH).optional(),
   contractAddress: z.string().optional(),
   eventType: z.string().optional(),
   topicSymbol: z.string().optional(),
+  deliveryStrategy: z.enum(['immediate', 'batch']).default('immediate'),
+  batchSize: z.number().int().min(2).max(500).default(100),
+  batchWindowMs: z.number().int().min(0).max(60_000).default(50),
 });
 
 // Update accepts any subset of mutable fields. `null` clears a filter.
 const updateSchema = z
   .object({
-    url: z.string().url().optional(),
+    url: webhookUrlSchema.optional(),
     contractAddress: z.string().nullable().optional(),
     eventType: z.string().nullable().optional(),
     topicSymbol: z.string().nullable().optional(),
     active: z.boolean().optional(),
+    deliveryStrategy: z.enum(['immediate', 'batch']).optional(),
+    batchSize: z.number().int().min(2).max(500).optional(),
+    batchWindowMs: z.number().int().min(0).max(60_000).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one updatable field must be provided',
@@ -97,7 +113,8 @@ function buildSampleEvent(sub: SubFilter): Record<string, unknown> {
  *       Register a server endpoint to receive on-chain contract event
  *       notifications. Each delivery is signed with HMAC-SHA256 using the
  *       signing secret (X-Webhook-Signature header). Failed deliveries are
- *       retried with exponential backoff (up to 5 attempts).
+ *       retried with exponential backoff. Immediate deliveries stop after five
+ *       attempts; batch deliveries continue retrying until success or cancellation.
  *       The secret is returned only once in this response — store it securely.
  *       New subscriptions start unverified; complete
  *       `POST /webhooks/{id}/verify` to confirm ownership of the URL.
@@ -132,11 +149,30 @@ function buildSampleEvent(sub: SubFilter): Record<string, unknown> {
  *               topicSymbol:
  *                 type: string
  *                 description: Filter to a specific topic symbol
+ *               deliveryStrategy:
+ *                 type: string
+ *                 enum: [immediate, batch]
+ *                 default: immediate
+ *                 description: Batch mode requires the webhookBatchDelivery feature flag.
+ *               batchSize:
+ *                 type: integer
+ *                 minimum: 2
+ *                 maximum: 500
+ *                 default: 100
+ *               batchWindowMs:
+ *                 type: integer
+ *                 minimum: 0
+ *                 maximum: 60000
+ *                 default: 50
  *     responses:
  *       201:
  *         description: Subscription created — includes the signing secret (shown once)
  *       400:
  *         description: Validation error
+ *       404:
+ *         description: Batch delivery feature is disabled
+ *       503:
+ *         description: Batch delivery schema is unavailable
  *       401:
  *         description: API key required
  */
@@ -145,6 +181,21 @@ webhooksRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    if (parsed.data.deliveryStrategy === 'batch') {
+      const available = await featureFlags.isAvailable('webhookBatchDelivery');
+      if (!available) {
+        return res.status(503).json({
+          error: 'Batch webhook delivery is unavailable until its database migration is applied',
+          code: 'SCHEMA_UNAVAILABLE',
+        });
+      }
+      if (!(await featureFlags.isEnabled('webhookBatchDelivery', {
+        developerId: req.apiKey?.developerId,
+      }))) {
+        return res.status(404).json({ error: 'Feature not found', code: 'FEATURE_DISABLED' });
+      }
+    }
 
     // SSRF guard: reject URLs that resolve to private/loopback/metadata addresses.
     try {
@@ -166,6 +217,9 @@ webhooksRouter.post(
         contractAddress: parsed.data.contractAddress,
         eventType: parsed.data.eventType,
         topicSymbol: parsed.data.topicSymbol,
+        deliveryStrategy: parsed.data.deliveryStrategy,
+        batchSize: parsed.data.batchSize,
+        batchWindowMs: parsed.data.batchWindowMs,
       },
     });
 
@@ -177,6 +231,9 @@ webhooksRouter.post(
       contractAddress: sub.contractAddress,
       eventType: sub.eventType,
       topicSymbol: sub.topicSymbol,
+      deliveryStrategy: sub.deliveryStrategy,
+      batchSize: sub.batchSize,
+      batchWindowMs: sub.batchWindowMs,
       active: sub.active,
       verified: sub.verified,
       createdAt: sub.createdAt,
@@ -210,6 +267,9 @@ webhooksRouter.get(
         contractAddress: true,
         eventType: true,
         topicSymbol: true,
+        deliveryStrategy: true,
+        batchSize: true,
+        batchWindowMs: true,
         active: true,
         verified: true,
         verifiedAt: true,
@@ -259,6 +319,24 @@ webhooksRouter.get(
           attempt: 'number (1-based)',
         },
       },
+      batchEnvelope: {
+        enabledBy: 'deliveryStrategy=batch',
+        body: {
+          batchId: 'stable identifier for this batch',
+          idempotencyKey: 'sha256 hex; stable across retries',
+          events: ['event object using the immediate envelope event schema'],
+          attempt: 'number (1-based)',
+        },
+        headers: {
+          'Idempotency-Key': 'same value as idempotencyKey',
+        },
+        maxEvents: 500,
+        maxBodyBytes: 1_000_000,
+        retryPolicy: {
+          networkAndHttpErrors: 'retry with capped backoff until delivered or cancelled',
+          terminalErrors: ['SSRF_BLOCKED', 'PAYLOAD_TOO_LARGE'],
+        },
+      },
       headers: {
         'X-Webhook-Signature':
           'sha256=<hex HMAC-SHA256 of the raw request body, keyed by your signing secret>',
@@ -274,8 +352,11 @@ webhooksRouter.get(
           'Reject requests whose X-Webhook-Timestamp is outside the tolerance window and cache accepted signatures for the window to reject replays.',
       },
       retryPolicy: {
-        maxAttempts: MAX_ATTEMPTS,
+        immediateMaxAttempts: MAX_ATTEMPTS,
         backoffMs: [1, 2, 3, 4].map((attempt) => backoffMs(attempt)),
+        batchMaxAttempts: null,
+        batchFirstRetryDelayMs: backoffMs(2),
+        batchMaximumRetryDelayMs: backoffMs(10),
         requestTimeoutMs: REQUEST_TIMEOUT_MS,
         successCriteria: 'HTTP 2xx',
       },
@@ -386,6 +467,9 @@ curl https://api.example.com/webhooks/$SUB_ID/preview \\
  *               eventType: { type: string, nullable: true }
  *               topicSymbol: { type: string, nullable: true }
  *               active: { type: boolean }
+ *               deliveryStrategy: { type: string, enum: [immediate, batch] }
+ *               batchSize: { type: integer, minimum: 2, maximum: 500 }
+ *               batchWindowMs: { type: integer, minimum: 0, maximum: 60000 }
  *     responses:
  *       200:
  *         description: Updated subscription
@@ -393,6 +477,10 @@ curl https://api.example.com/webhooks/$SUB_ID/preview \\
  *         description: Validation error or blocked URL
  *       404:
  *         description: Not found or not owned by caller
+ *       409:
+ *         description: Existing deliveries must drain before changing strategy or destination
+ *       503:
+ *         description: Batch delivery schema is unavailable
  *       401:
  *         description: API key required
  */
@@ -406,6 +494,58 @@ webhooksRouter.patch(
       where: { id: req.params.id, apiKeyId: req.apiKey!.id },
     });
     if (!existing) return res.status(404).json({ error: 'Subscription not found' });
+
+    const batchDestinationChange =
+      existing.deliveryStrategy === 'batch' &&
+      parsed.data.url !== undefined &&
+      parsed.data.url !== existing.url;
+    if (
+      existing.deliveryStrategy === 'batch' &&
+      (parsed.data.deliveryStrategy === 'immediate' || batchDestinationChange)
+    ) {
+      const pendingBatches = await prismaRead.webhookOutboxEvent.count({
+        where: { subscriptionId: existing.id, status: { in: ['pending', 'batched'] } },
+      });
+      if (pendingBatches > 0) {
+        return res.status(409).json({
+          error: 'Batch deliveries must drain before changing strategy or destination',
+          code: 'BATCH_QUEUE_NOT_DRAINED',
+          pendingEvents: pendingBatches,
+        });
+      }
+    }
+
+    const selectingBatch = parsed.data.deliveryStrategy === 'batch';
+    if (selectingBatch && existing.deliveryStrategy !== 'batch') {
+      const activeDeliveries = await prismaRead.webhookDelivery.count({
+        where: { subscriptionId: existing.id, status: 'pending' },
+      });
+      if (activeDeliveries > 0) {
+        return res.status(409).json({
+          error: 'Existing immediate deliveries must settle before switching to batch mode',
+          code: 'IMMEDIATE_DELIVERIES_NOT_DRAINED',
+          pendingDeliveries: activeDeliveries,
+        });
+      }
+    }
+    const changingBatchSettings =
+      existing.deliveryStrategy === 'batch' &&
+      parsed.data.deliveryStrategy === undefined &&
+      (parsed.data.batchSize !== undefined || parsed.data.batchWindowMs !== undefined);
+    if (selectingBatch || changingBatchSettings) {
+      const available = await featureFlags.isAvailable('webhookBatchDelivery');
+      if (!available) {
+        return res.status(503).json({
+          error: 'Batch webhook delivery is unavailable until its database migration is applied',
+          code: 'SCHEMA_UNAVAILABLE',
+        });
+      }
+      if (!(await featureFlags.isEnabled('webhookBatchDelivery', {
+        developerId: req.apiKey?.developerId,
+      }))) {
+        return res.status(404).json({ error: 'Feature not found', code: 'FEATURE_DISABLED' });
+      }
+    }
 
     const data: Prisma.WebhookSubscriptionUpdateInput = {};
 
@@ -436,6 +576,15 @@ webhooksRouter.patch(
     if (parsed.data.active !== undefined) {
       data.active = parsed.data.active;
     }
+    if (parsed.data.deliveryStrategy !== undefined) {
+      data.deliveryStrategy = parsed.data.deliveryStrategy;
+    }
+    if (parsed.data.batchSize !== undefined) {
+      data.batchSize = parsed.data.batchSize;
+    }
+    if (parsed.data.batchWindowMs !== undefined) {
+      data.batchWindowMs = parsed.data.batchWindowMs;
+    }
 
     const sub = await prisma.webhookSubscription.update({
       where: { id: existing.id },
@@ -446,14 +595,20 @@ webhooksRouter.patch(
     // retry loop doesn't attempt them before it notices the subscription is
     // inactive (#482).
     if (parsed.data.active === false) {
-      await prisma.webhookDelivery.updateMany({
-        where: { subscriptionId: sub.id, status: 'pending' },
-        data: {
-          status: 'cancelled',
-          processingStatus: 'done',
-          leaseExpiresAt: null,
-          nextRetryAt: null,
-        },
+      await prisma.$transaction(async (tx) => {
+        await tx.webhookDelivery.updateMany({
+          where: { subscriptionId: sub.id, status: 'pending' },
+          data: {
+            status: 'cancelled',
+            processingStatus: 'done',
+            leaseExpiresAt: null,
+            nextRetryAt: null,
+          },
+        });
+        await tx.webhookOutboxEvent.updateMany({
+          where: { subscriptionId: sub.id, status: { in: ['pending', 'batched'] } },
+          data: { status: 'cancelled' },
+        });
       });
     }
 
@@ -463,6 +618,9 @@ webhooksRouter.patch(
       contractAddress: sub.contractAddress,
       eventType: sub.eventType,
       topicSymbol: sub.topicSymbol,
+      deliveryStrategy: sub.deliveryStrategy,
+      batchSize: sub.batchSize,
+      batchWindowMs: sub.batchWindowMs,
       active: sub.active,
       verified: sub.verified,
       verifiedAt: sub.verifiedAt,
@@ -704,7 +862,16 @@ webhooksRouter.get(
     if (!sub) return res.status(404).json({ error: 'Subscription not found' });
 
     const event = buildSampleEvent(sub);
-    const rawBody = JSON.stringify({ event, attempt: 1 });
+    const batchPayload = {
+      batchId: `preview-${uuidv7()}`,
+      idempotencyKey: createBatchIdempotencyKey(sub.id, [event as unknown as WebhookPayload]),
+      events: [event],
+    };
+    const deliveryBody =
+      sub.deliveryStrategy === 'batch'
+        ? { ...batchPayload, attempt: 1 }
+        : { event, attempt: 1 };
+    const rawBody = JSON.stringify(deliveryBody);
     const timestampMs = Date.now();
 
     res.json({
@@ -714,10 +881,13 @@ webhooksRouter.get(
         url: sub.url,
         headers: {
           'Content-Type': 'application/json',
+          ...(sub.deliveryStrategy === 'batch'
+            ? { 'Idempotency-Key': batchPayload.idempotencyKey }
+            : {}),
           'X-Webhook-Timestamp': String(timestampMs),
           'X-Webhook-Signature': signWebhookBody(rawBody, sub.secret),
         },
-        body: { event, attempt: 1 },
+        body: deliveryBody,
       },
       rawBody,
       signatureFormat: 'sha256=<hex>',
@@ -762,6 +932,21 @@ webhooksRouter.get(
       where: { subscriptionId: sub.id },
       orderBy: { createdAt: 'desc' },
       take: 50,
+      select: {
+        id: true,
+        eventId: true,
+        idempotencyKey: true,
+        attempt: true,
+        status: true,
+        httpStatus: true,
+        responseBody: true,
+        errorMsg: true,
+        errorCode: true,
+        deliveredAt: true,
+        nextRetryAt: true,
+        createdAt: true,
+        expiresAt: true,
+      },
     });
     res.json({ data: deliveries });
   }),

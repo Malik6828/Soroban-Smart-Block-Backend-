@@ -22,6 +22,7 @@ import { decodeTransaction, decodeEvent } from './decoder';
 import { decodeZkpVerification, recordZkpVerification } from './zkp-verifier';
 import { processAaTransaction } from './aa-indexer';
 import { feedOrchestrator } from '../feed/orchestrator';
+import { dispatchWebhooks } from '../webhooks/dispatcher';
 import { enqueueInitialAudit } from './audit-pipeline';
 import { amIResponsibleFor, getRangeCursor, isP2pEnabled, setRangeCursor } from '../p2p';
 import { logger } from '../logger';
@@ -545,6 +546,17 @@ export async function processLedgerRange(
     await feedOrchestrator
       .publishEvent(savedEvent)
       .catch((err) => logger.error('publishEvent error:', err));
+
+    await dispatchWebhooks({
+      id: savedEvent.id,
+      contractAddress: savedEvent.contractAddress,
+      eventType: savedEvent.eventType,
+      topicSymbol: savedEvent.topicSymbol,
+      decoded: savedEvent.decoded,
+      ledgerSequence: savedEvent.ledgerSequence,
+      ledgerCloseTime: savedEvent.ledgerCloseTime,
+      transactionHash: savedEvent.transactionHash,
+    });
 
     await processSessionAuthorization(event, eventType, decoded, eventId);
     stopEnrichEventTimer();

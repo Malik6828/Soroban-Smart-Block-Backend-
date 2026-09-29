@@ -1,4 +1,5 @@
 import { Registry, Counter, Histogram, Gauge, collectDefaultMetrics } from 'prom-client';
+import { metrics as otelMetrics } from '@opentelemetry/api';
 
 export const registry = new Registry();
 
@@ -42,6 +43,63 @@ export const contractAbiSubmissionValidationDuration = new Histogram({
   buckets: [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5],
   registers: [registry],
 });
+
+// ── Webhook batch delivery ───────────────────────────────────────────────────
+export const webhookBatchOperationsTotal = new Counter({
+  name: 'webhook_batch_operations_total',
+  help: 'Webhook batch queue and delivery outcomes',
+  labelNames: ['operation', 'outcome'],
+  registers: [registry],
+});
+
+export const webhookBatchEvents = new Histogram({
+  name: 'webhook_batch_events',
+  help: 'Number of events in a dispatched webhook batch',
+  buckets: [1, 2, 5, 10, 25, 50, 100, 250, 500],
+  registers: [registry],
+});
+
+export const webhookDeliveryDurationSeconds = new Histogram({
+  name: 'webhook_delivery_duration_seconds',
+  help: 'Webhook destination request duration in seconds by delivery mode',
+  labelNames: ['mode'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+  registers: [registry],
+});
+
+export const webhookEventToDeliverySeconds = new Histogram({
+  name: 'webhook_event_to_delivery_seconds',
+  help: 'Elapsed time from event ledger close to successful webhook delivery',
+  labelNames: ['mode'],
+  buckets: [0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30],
+  registers: [registry],
+});
+
+const webhookMeter = otelMetrics.getMeter('soroban-webhook-delivery');
+export const webhookBatchOperationsOtel = webhookMeter.createCounter('webhook.batch.operations');
+export const webhookBatchEventsOtel = webhookMeter.createHistogram('webhook.batch.events');
+export const webhookDeliveryDurationOtel = webhookMeter.createHistogram(
+  'webhook.delivery.duration',
+  { unit: 's' },
+);
+export const webhookEventToDeliveryOtel = webhookMeter.createHistogram(
+  'webhook.event_to_delivery',
+  { unit: 's' },
+);
+let webhookOutboxDepthValue = 0;
+export const webhookOutboxDepth = new Gauge({
+  name: 'webhook_outbox_events',
+  help: 'Pending or in-flight durable webhook outbox events',
+  registers: [registry],
+});
+webhookMeter
+  .createObservableGauge('webhook.outbox.events')
+  .addCallback((observable) => observable.observe(webhookOutboxDepthValue));
+
+export function setWebhookOutboxDepth(value: number): void {
+  webhookOutboxDepthValue = Math.max(0, value);
+  webhookOutboxDepth.set(webhookOutboxDepthValue);
+}
 
 // ── 5xx Error Surge Alerting ─────────────────────────────────────────────────
 export const http5xxSurge = new Gauge({
