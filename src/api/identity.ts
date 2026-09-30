@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prismaWrite as prisma, prismaRead } from '../db';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -151,7 +152,7 @@ identityRouter.post(
       where: { chain_address: { chain: parsed.data.chain, address: parsed.data.address } },
       update: {
         label: parsed.data.label,
-        metadata: parsed.data.metadata,
+        metadata: parsed.data.metadata as Prisma.InputJsonValue,
         identityId: req.params.id,
       },
       create: { identityId: req.params.id, ...parsed.data },
@@ -201,7 +202,7 @@ identityRouter.post(
       update: {
         linkType: parsed.data.linkType,
         confidence: parsed.data.confidence,
-        evidence: parsed.data.evidence,
+        evidence: parsed.data.evidence as Prisma.InputJsonValue,
       },
       create: { sourceIdentityId: req.params.id, ...parsed.data },
     });

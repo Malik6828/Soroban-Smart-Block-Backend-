@@ -197,7 +197,7 @@ export async function getAssetHolders(code: string, issuer: string, limit = 20) 
     };
 
   return {
-    holders: [],
+    holders: [] as Array<Record<string, unknown>>,
     totalHolders: asset.num_accounts,
     concentration: {
       gini: 0.5,

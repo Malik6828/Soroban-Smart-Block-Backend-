@@ -10,6 +10,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { cacheGet, cacheSet, buildCacheKey } from '../cache';
 import { requireRole } from '../auth/middleware';
+import { asyncHandler } from '../middleware/asyncHandler';
 
 export const tokenLabelsRouter = Router();
 
@@ -81,18 +82,21 @@ export function summarizeLabels(labels: TokenLabel[]) {
  *       400:
  *         description: Invalid token id
  */
-tokenLabelsRouter.get('/:tokenId', asyncHandler(async (req: Request, res: Response) => {
-  const id = idSchema.safeParse(req.params.tokenId);
-  if (!id.success) return res.status(400).json({ error: 'Invalid token id' });
+tokenLabelsRouter.get(
+  '/:tokenId',
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = idSchema.safeParse(req.params.tokenId);
+    if (!id.success) return res.status(400).json({ error: 'Invalid token id' });
 
-  const cached = await cacheGet<object>(cacheKey(id.data)).catch((): null => null);
-  if (cached) return res.json({ ...cached, cached: true });
+    const cached = await cacheGet<object>(cacheKey(id.data)).catch((): null => null);
+    if (cached) return res.json({ ...cached, cached: true });
 
-  const labels = labelStore.get(id.data) ?? [];
-  const body = { tokenId: id.data, labels, summary: summarizeLabels(labels) };
-  await cacheSet(cacheKey(id.data), body, CACHE_TTL_SECONDS).catch((): undefined => undefined);
-  res.json({ ...body, cached: false });
-}));
+    const labels = labelStore.get(id.data) ?? [];
+    const body = { tokenId: id.data, labels, summary: summarizeLabels(labels) };
+    await cacheSet(cacheKey(id.data), body, CACHE_TTL_SECONDS).catch((): undefined => undefined);
+    res.json({ ...body, cached: false });
+  }),
+);
 
 /**
  * @swagger
@@ -104,24 +108,29 @@ tokenLabelsRouter.get('/:tokenId', asyncHandler(async (req: Request, res: Respon
  *       200:
  *         description: Updated labels
  */
-tokenLabelsRouter.put('/:tokenId', requireRole('admin'), asyncHandler(async (req: Request, res: Response) => {
-  const id = idSchema.safeParse(req.params.tokenId);
-  const body = labelSchema.safeParse(req.body);
-  if (!id.success || !body.success) {
-    return res
-      .status(400)
-      .json({ error: 'Invalid request', details: body.success ? undefined : body.error.issues });
-  }
-  const labels = labelStore.get(id.data) ?? [];
-  const idx = labels.findIndex(
-    (l) => l.kind === body.data.kind && l.code === body.data.code && l.source === body.data.source,
-  );
-  const label: TokenLabel = { ...body.data, updatedAt: new Date().toISOString() };
-  if (idx >= 0) labels[idx] = label;
-  else if (labels.length >= MAX_LABELS_PER_TOKEN) {
-    return res.status(409).json({ error: 'Label limit reached for token' });
-  } else labels.push(label);
-  labelStore.set(id.data, labels);
-  await cacheSet(cacheKey(id.data), null, 1).catch((): undefined => undefined);
-  res.json({ tokenId: id.data, labels });
-}));
+tokenLabelsRouter.put(
+  '/:tokenId',
+  requireRole('admin'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const id = idSchema.safeParse(req.params.tokenId);
+    const body = labelSchema.safeParse(req.body);
+    if (!id.success || !body.success) {
+      return res
+        .status(400)
+        .json({ error: 'Invalid request', details: body.success ? undefined : body.error.issues });
+    }
+    const labels = labelStore.get(id.data) ?? [];
+    const idx = labels.findIndex(
+      (l) =>
+        l.kind === body.data.kind && l.code === body.data.code && l.source === body.data.source,
+    );
+    const label: TokenLabel = { ...body.data, updatedAt: new Date().toISOString() };
+    if (idx >= 0) labels[idx] = label;
+    else if (labels.length >= MAX_LABELS_PER_TOKEN) {
+      return res.status(409).json({ error: 'Label limit reached for token' });
+    } else labels.push(label);
+    labelStore.set(id.data, labels);
+    await cacheSet(cacheKey(id.data), null, 1).catch((): undefined => undefined);
+    res.json({ tokenId: id.data, labels });
+  }),
+);

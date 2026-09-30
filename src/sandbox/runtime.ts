@@ -485,12 +485,9 @@ function makeContractId(seed: string, index: number, salt?: string): string {
   return StrKey.encodeContract(deriveBytes(seed, `contract:${suffix}`, index));
 }
 
-function toDecimalString(
-  value: string | number | Prisma.Decimal | undefined,
-  fallback = '0',
-): string {
-  if (value === undefined) return fallback;
-  return new Prisma.Decimal(value).toFixed();
+function toDecimalString(value: unknown, fallback = '0'): string {
+  if (value === undefined || value === null) return fallback;
+  return new Prisma.Decimal(String(value)).toFixed();
 }
 
 function decimalPlus(left: string, right: string): string {

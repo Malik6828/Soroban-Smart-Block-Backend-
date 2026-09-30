@@ -382,7 +382,7 @@ export async function seedTemplates(): Promise<void> {
           category: template.category,
           version: template.version,
           author: template.author,
-          price: template.price || 0,
+          price: String(template.price ?? 0),
           configSchema: template.configSchema as any,
           wasmBase64: template.wasmBase64,
           abi: template.abi as any,

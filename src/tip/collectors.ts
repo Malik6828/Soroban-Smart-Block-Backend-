@@ -19,7 +19,7 @@ export async function fetchCves(
   const src = await db.vulnerabilitySource.upsert({
     where: { name: 'NVD_CVE' },
     update: {},
-    create: { id: uuidv7(), name: 'NVD_CVE', sourceType: 'cve', feedUrl: NVD_BASE },
+    create: { id: uuidv7(), name: 'NVD_CVE', sourceType: 'cve', feedUrl: NVD_BASE, active: true },
   });
 
   const resp = await axios.get(NVD_BASE, {
@@ -51,7 +51,7 @@ export async function fetchCves(
         sourceId: src.id,
         affectedContracts: [],
         affectedChains: ['stellar'],
-        mitigations: [],
+        mitigations: undefined,
         tags: ['cve', 'nvd'],
         publishedAt: cve.published ? new Date(cve.published) : undefined,
       },
@@ -75,7 +75,7 @@ export async function fetchGhsa(token?: string): Promise<number> {
   const src = await db.vulnerabilitySource.upsert({
     where: { name: 'GHSA' },
     update: {},
-    create: { id: uuidv7(), name: 'GHSA', sourceType: 'ghsa', feedUrl: GHSA_GQL },
+    create: { id: uuidv7(), name: 'GHSA', sourceType: 'ghsa', feedUrl: GHSA_GQL, active: true },
   });
 
   const query = `{ securityAdvisories(first: 50, classifications: [GENERAL]) {
@@ -106,7 +106,7 @@ export async function fetchGhsa(token?: string): Promise<number> {
         sourceId: src.id,
         affectedContracts: [],
         affectedChains: ['stellar'],
-        mitigations: [],
+        mitigations: undefined,
         tags: ['ghsa', 'github'],
         publishedAt: node.publishedAt ? new Date(node.publishedAt) : undefined,
         externalUrl: node.references?.[0]?.url,
@@ -131,7 +131,7 @@ export async function ingestOnChainAlerts(): Promise<number> {
   const src = await db.vulnerabilitySource.upsert({
     where: { name: 'ON_CHAIN' },
     update: {},
-    create: { id: uuidv7(), name: 'ON_CHAIN', sourceType: 'onchain' },
+    create: { id: uuidv7(), name: 'ON_CHAIN', sourceType: 'onchain', active: true },
   });
 
   // Flash-loan alerts
@@ -156,7 +156,7 @@ export async function ingestOnChainAlerts(): Promise<number> {
         severity: 'high',
         affectedContracts: tx.contractAddress ? [tx.contractAddress] : [],
         affectedChains: ['stellar'],
-        mitigations: ['Review contract for reentrancy', 'Add flash-loan guards'],
+        mitigations: ['Review contract for reentrancy', 'Add flash-loan guards'].join('; '),
         sourceId: src.id,
         tags: ['flash-loan', 'on-chain'],
         publishedAt: tx.ledgerCloseTime,
@@ -192,7 +192,7 @@ export async function submitManual(data: ManualSubmission): Promise<string> {
   const src = await db.vulnerabilitySource.upsert({
     where: { name: 'COMMUNITY' },
     update: {},
-    create: { id: uuidv7(), name: 'COMMUNITY', sourceType: 'manual' },
+    create: { id: uuidv7(), name: 'COMMUNITY', sourceType: 'manual', active: true },
   });
 
   const advisory = await db.threatAdvisory.create({
@@ -204,7 +204,7 @@ export async function submitManual(data: ManualSubmission): Promise<string> {
       cvssScore: data.cvssScore,
       affectedContracts: data.affectedContracts ?? [],
       affectedChains: data.affectedChains ?? ['stellar'],
-      mitigations: data.mitigations ?? [],
+      mitigations: (data.mitigations ?? []).join('; '),
       tags: [...(data.tags ?? []), 'community'],
       externalUrl: data.externalUrl,
       submittedBy: data.submittedBy,

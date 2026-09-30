@@ -90,14 +90,14 @@ export function trackDataMarketUsage(req: Request, res: Response, next: NextFunc
   const u: KeyUsage = byKey.get(key.id) ?? {
     keyId: key.id,
     developerId: key.developerId,
-    tier: key.tier,
+    tier: key.tier as RateLimitTier,
     total: 0,
     billable: 0,
     errors: 0,
     endpoints: new Map(),
   };
   byKey.set(key.id, u);
-  u.tier = key.tier;
+  u.tier = key.tier as RateLimitTier;
 
   const status = quotaStatus({ keyId: u.keyId, tier: u.tier, total: u.total + 1 });
   res.setHeader('X-Quota-Limit', String(status.limit));
@@ -161,7 +161,7 @@ dataMarketUsageRouter.get('/me', (req: Request, res: Response) => {
           billableRequests: 0,
           errors: 0,
           revenueCents: 0,
-          quota: quotaStatus({ keyId: key.id, tier: key.tier, total: 0 }),
+          quota: quotaStatus({ keyId: key.id, tier: key.tier as RateLimitTier, total: 0 }),
           endpoints: [],
         }),
   });
