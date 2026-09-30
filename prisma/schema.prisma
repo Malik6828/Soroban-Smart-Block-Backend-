@@ -3051,6 +3051,10 @@ model NetworkNode {
   uptime30d Float? @map("uptime30d")
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
+
+  events  NetworkNodeEvent[]
+  metrics NetworkNodeMetric[]
+
   @@map("_network_nodes")
 }
 
@@ -6422,4 +6426,75 @@ model MonitoredAddress {
   @@unique([address, chain])
   @@index([active])
   @@index([chain])
+}
+
+/// Per-node event log (version changes, state transitions). Written by
+/// src/indexer/network-indexer.ts; `nodeId` references NetworkNode.id.
+model NetworkNodeEvent {
+  id        String   @map("id") @id @default(cuid())
+  nodeId    String   @map("node_id")
+  eventType String   @map("event_type")
+  details   Json?    @map("details")
+  timestamp DateTime @map("timestamp")
+  createdAt DateTime @map("created_at") @default(now())
+
+  node NetworkNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId, timestamp])
+  @@index([eventType])
+  @@map("_network_node_events")
+}
+
+/// Periodic per-node metric snapshots (peers, latency, agreement rate).
+model NetworkNodeMetric {
+  id            String   @map("id") @id @default(cuid())
+  nodeId        String   @map("node_id")
+  timestamp     DateTime @map("timestamp")
+  peerCount     Int?     @map("peer_count")
+  latency       Float?   @map("latency")
+  agreementRate Float?   @map("agreement_rate")
+  createdAt     DateTime @map("created_at") @default(now())
+
+  node NetworkNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId, timestamp])
+  @@map("_network_node_metrics")
+}
+
+/// One row per closed Stellar consensus round, keyed by ledger sequence.
+model NetworkConsensusRound {
+  id                String    @map("id") @id @default(cuid())
+  ledgerSeq         Int       @map("ledger_seq") @unique
+  startTime         DateTime  @map("start_time")
+  endTime           DateTime? @map("end_time")
+  durationMs        Int?      @map("duration_ms")
+  txCount           Int?      @map("tx_count")
+  successful        Boolean   @map("successful") @default(true)
+  nodesParticipated Int?      @map("nodes_participated")
+  quorumSetSize     Int?      @map("quorum_set_size")
+  createdAt         DateTime  @map("created_at") @default(now())
+
+  @@index([ledgerSeq])
+  @@map("_network_consensus_rounds")
+}
+
+/// Historical contract storage-state changes captured by src/archive;
+/// powers time-travel state queries and ledger diffs.
+model ContractStateChange {
+  id              String   @map("id") @id @default(cuid())
+  contractAddress String   @map("contract_address")
+  ledger          Int      @map("ledger")
+  ledgerCloseTime DateTime @map("ledger_close_time")
+  storageKey      String   @map("storage_key")
+  storageKeyHuman String?  @map("storage_key_human")
+  valueBefore     String?  @map("value_before")
+  valueAfter      String?  @map("value_after")
+  valueHuman      String?  @map("value_human")
+  operation       String   @map("operation")
+  transactionHash String?  @map("transaction_hash")
+  createdAt       DateTime @map("created_at") @default(now())
+
+  @@index([contractAddress, ledger])
+  @@index([contractAddress, storageKey, ledger])
+  @@map("_contract_state_changes")
 }

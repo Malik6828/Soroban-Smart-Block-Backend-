@@ -12,7 +12,8 @@
  * - ✅ Reusable across tests
  */
 
-import { MevType, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { MevType } from '../../src/types/mev';
 
 // ─────────────────────────────────────────────────────────────────────
 // MEV Classification Mocks
