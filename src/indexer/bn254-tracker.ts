@@ -352,7 +352,8 @@ export async function trackBn254GasExemption(
         stroopSavings,
         savingsPct,
         cpuInstructions,
-        msmComplexity,
+        // msm_complexity is a TEXT column on the model.
+        msmComplexity: String(msmComplexity),
       },
     });
   } else {
@@ -367,7 +368,7 @@ export async function trackBn254GasExemption(
         stroopSavings,
         savingsPct,
         cpuInstructions,
-        msmComplexity,
+        msmComplexity: String(msmComplexity),
         ledgerSequence,
         ledgerCloseTime,
       },
@@ -409,8 +410,8 @@ export async function getBn254ExemptionByTx(
     estimatedWasmFee: record.estimatedWasmFee,
     stroopSavings: record.stroopSavings,
     savingsPct: record.savingsPct,
-    cpuInstructions: record.cpuInstructions,
-    msmComplexity: record.msmComplexity,
+    cpuInstructions: record.cpuInstructions ?? 0,
+    msmComplexity: Number(record.msmComplexity ?? 0),
     humanReadable:
       record.savingsPct != null
         ? `Saved ${record.savingsPct}% in processing fees via host ZK acceleration (${ops.join(', ')})`
@@ -440,8 +441,8 @@ export async function getBn254ExemptionsByContract(
       estimatedWasmFee: r.estimatedWasmFee,
       stroopSavings: r.stroopSavings,
       savingsPct: r.savingsPct,
-      cpuInstructions: r.cpuInstructions,
-      msmComplexity: r.msmComplexity,
+      cpuInstructions: r.cpuInstructions ?? 0,
+      msmComplexity: Number(r.msmComplexity ?? 0),
       humanReadable:
         r.savingsPct != null
           ? `Saved ${r.savingsPct}% in processing fees via host ZK acceleration (${ops.join(', ')})`

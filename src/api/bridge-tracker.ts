@@ -136,7 +136,9 @@ bridgeTrackerRouter.post(
         ),
       });
       const { events } = schema.parse(req.body);
-      const result = await detectBridgeTransactions(events);
+      const result = await detectBridgeTransactions(
+        events as Parameters<typeof detectBridgeTransactions>[0],
+      );
       res.json(result);
     } catch (e) {
       res.status(400).json({ error: String(e) });

@@ -29,7 +29,7 @@ axios.interceptors?.request?.use?.(
   (config) => {
     const ctx = traceStorage.getStore();
     if (ctx?.requestId) {
-      config.headers = config.headers || {};
+      config.headers = config.headers || ({} as typeof config.headers);
       // Axios v1 headers can be accessed as config.headers[name]
       config.headers['X-Request-Id'] = ctx.requestId;
     }

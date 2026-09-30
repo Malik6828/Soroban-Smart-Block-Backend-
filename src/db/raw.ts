@@ -14,6 +14,7 @@
 import { Pool } from 'pg';
 import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { config } from '../config';
+import { logger } from '../logger';
 
 let pool: Pool | null = null;
 
@@ -27,7 +28,7 @@ function getPool(): Pool {
     });
     // A pooled background client that idle-errors must not crash the process.
     pool.on('error', (err) => {
-      console.error('[db/raw] idle client error', err.message);
+      logger.error(`[db/raw] idle client error: ${err.message}`);
     });
   }
   return pool;

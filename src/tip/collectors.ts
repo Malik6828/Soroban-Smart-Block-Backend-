@@ -54,6 +54,7 @@ export async function fetchCves(
         mitigations: undefined,
         tags: ['cve', 'nvd'],
         publishedAt: cve.published ? new Date(cve.published) : undefined,
+        status: 'open',
       },
     });
     imported++;
@@ -110,6 +111,7 @@ export async function fetchGhsa(token?: string): Promise<number> {
         tags: ['ghsa', 'github'],
         publishedAt: node.publishedAt ? new Date(node.publishedAt) : undefined,
         externalUrl: node.references?.[0]?.url,
+        status: 'open',
       },
     });
     imported++;
@@ -160,6 +162,7 @@ export async function ingestOnChainAlerts(): Promise<number> {
         sourceId: src.id,
         tags: ['flash-loan', 'on-chain'],
         publishedAt: tx.ledgerCloseTime,
+        status: 'open',
       },
     });
     imported++;
@@ -207,7 +210,6 @@ export async function submitManual(data: ManualSubmission): Promise<string> {
       mitigations: (data.mitigations ?? []).join('; '),
       tags: [...(data.tags ?? []), 'community'],
       externalUrl: data.externalUrl,
-      submittedBy: data.submittedBy,
       sourceId: src.id,
       status: 'open',
     },

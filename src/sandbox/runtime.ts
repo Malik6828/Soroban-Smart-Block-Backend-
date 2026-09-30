@@ -540,7 +540,9 @@ function buildGenesisBlock(
 }
 
 function hydrateDocument(session: any): RuntimeDocument {
-  const state = session.state as RuntimeDocument | null | undefined;
+  const raw = session.state;
+  const state: RuntimeDocument | null | undefined =
+    typeof raw === 'string' ? (JSON.parse(raw) as RuntimeDocument) : (raw as RuntimeDocument);
   if (state && state.genesis && state.runtime) {
     return clone(state);
   }
@@ -670,7 +672,8 @@ async function persistBundle(bundle: RuntimeBundle): Promise<void> {
   await prismaWrite.sandboxSession.update({
     where: { id: bundle.session.id },
     data: {
-      state: bundle.document,
+      // _sandbox_sessions.state is a TEXT column; serialise the document.
+      state: JSON.stringify(bundle.document),
       ledgerSequence: bundle.document.runtime.ledgerSequence,
       ledgerTimestamp: new Date(bundle.document.runtime.ledgerTimestamp),
     },
@@ -938,9 +941,11 @@ async function rewriteLiveRows(
     prismaWrite.sandboxAccount.createMany({
       data: accounts.map((account) => ({
         sessionId,
+        // address mirrors the account's public key; the legacy column is required.
+        address: account.publicKey,
         publicKey: account.publicKey,
         label: account.label,
-        balance: new Prisma.Decimal(account.balance),
+        balance: account.balance,
         sequenceNumber: account.sequenceNumber,
         isPreFunded: account.isPreFunded,
       })),
@@ -948,6 +953,7 @@ async function rewriteLiveRows(
     prismaWrite.sandboxContract.createMany({
       data: contracts.map((contract) => ({
         sessionId,
+        address: contract.contractId,
         contractId: contract.contractId,
         name: contract.name,
         wasmHash: contract.wasmHash,
@@ -1087,9 +1093,10 @@ export class SandboxEngine {
     await prismaWrite.sandboxAccount.createMany({
       data: Object.values(genesis.accounts).map((account) => ({
         sessionId: session.id,
+        address: account.publicKey,
         publicKey: account.publicKey,
         label: account.label,
-        balance: new Prisma.Decimal(account.balance),
+        balance: account.balance,
         sequenceNumber: account.sequenceNumber,
         isPreFunded: account.isPreFunded,
       })),
@@ -1141,8 +1148,11 @@ export class SandboxEngine {
     const snapshot = await prismaWrite.sandboxSnapshot.create({
       data: {
         sessionId: input.sessionId,
-        name: input.name,
-        state: clone(bundle.document.runtime) as Prisma.InputJsonValue,
+        // SandboxSnapshot.label carries the human name; data/state are JSON
+        // stored on TEXT/JSONB columns respectively.
+        label: input.name,
+        data: clone(bundle.document.runtime) as unknown as Prisma.InputJsonValue,
+        state: JSON.stringify(bundle.document.runtime),
       },
     });
     return snapshot;
@@ -1159,7 +1169,11 @@ export class SandboxEngine {
     const bundle = getBundleOrThrow(sessionId);
     const snapshot = await prismaRead.sandboxSnapshot.findUnique({ where: { id: snapshotId } });
     if (!snapshot || snapshot.sessionId !== sessionId) throw new Error('Snapshot not found');
-    bundle.document.runtime = clone(snapshot.state as RuntimeBlock);
+    bundle.document.runtime = clone(
+      (typeof snapshot.state === 'string'
+        ? JSON.parse(snapshot.state)
+        : snapshot.state) as RuntimeBlock,
+    );
     await rewriteLiveRows(
       sessionId,
       Object.values(bundle.document.runtime.accounts),
@@ -1195,9 +1209,10 @@ export class SandboxEngine {
     await prismaWrite.sandboxAccount.create({
       data: {
         sessionId,
+        address: publicKey,
         publicKey,
         label: account.label,
-        balance: new Prisma.Decimal(account.balance),
+        balance: account.balance,
         sequenceNumber: account.sequenceNumber,
         isPreFunded: account.isPreFunded,
       },
@@ -1213,7 +1228,7 @@ export class SandboxEngine {
     account.balance = decimalPlus(account.balance, toDecimalString(input.amount));
     await prismaWrite.sandboxAccount.update({
       where: { sessionId_publicKey: { sessionId, publicKey: input.publicKey } },
-      data: { balance: new Prisma.Decimal(account.balance) },
+      data: { balance: account.balance },
     });
     await persistBundle(bundle);
     return account;
@@ -1291,6 +1306,7 @@ export class SandboxEngine {
     await prismaWrite.sandboxContract.create({
       data: {
         sessionId: input.sessionId,
+        address: contractId,
         contractId,
         name: contract.name,
         wasmHash,
@@ -2373,7 +2389,7 @@ export default spec('${contract.name ?? 'contract'}_spec', '${contractId}', [
         name: template.name,
         templateId: template.id,
         abi: template.abi,
-        state: templateStateForDeploy(template.id, template.defaultArgs),
+        state: templateStateForDeploy(template.id, template.defaultArgs as Record<string, unknown>),
       };
     }
 
@@ -2445,7 +2461,7 @@ export default spec('${contract.name ?? 'contract'}_spec', '${contractId}', [
   ): { ok: boolean; details?: Record<string, unknown> } {
     const balances = state.balances as Record<string, unknown> | undefined;
     const totalSupply = String((state as Record<string, any>).totalSupply ?? '0');
-    const summedBalances = Object.values(balances ?? {}).reduce(
+    const summedBalances = Object.values(balances ?? {}).reduce<string>(
       (sum, value) => decimalPlus(sum, String(value)),
       '0',
     );

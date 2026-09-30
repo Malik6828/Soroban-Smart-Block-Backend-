@@ -59,7 +59,8 @@ vendorAuditsRouter.post('/vendors', requireRole('admin'), (req: Request, res: Re
   const apiKey = randomBytes(32).toString('hex');
   const vendor: Vendor = {
     id: randomUUID(),
-    ...body.data,
+    name: body.data.name,
+    website: body.data.website,
     keyHash: hashKey(apiKey).toString('hex'),
     createdAt: new Date().toISOString(),
   };
@@ -86,7 +87,9 @@ vendorAuditsRouter.post(
       id: randomUUID(),
       vendorId: vendor.id,
       contractId: cid.data,
-      ...body.data,
+      scope: body.data.scope,
+      verdict: body.data.verdict,
+      reportUrl: body.data.reportUrl,
       reviewState: 'pending',
       publishedAt: new Date().toISOString(),
     };

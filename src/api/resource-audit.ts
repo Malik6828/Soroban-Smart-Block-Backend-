@@ -10,6 +10,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prismaRead } from '../db';
 import { asyncHandler } from '../middleware/asyncHandler';
 
@@ -341,10 +342,12 @@ resourceAuditRouter.get(
           : 'storageFootprint'; // write_bytes/events_bytes fall back to storageFootprint
 
     const rows = await prismaRead.contractResourceMetric.groupBy({
-      by: ['contractAddress'],
-      _sum: { [prismaField]: true } as any,
+      by: ['contractAddress'] as Prisma.ContractResourceMetricScalarFieldEnum[],
+      _sum: { [prismaField]: true } as Prisma.ContractResourceMetricSumAggregateInputType,
       _count: { id: true },
-      orderBy: { _sum: { [prismaField]: 'desc' } } as any,
+      orderBy: {
+        _sum: { [prismaField]: 'desc' },
+      } as Prisma.ContractResourceMetricOrderByWithAggregationInput,
       take: limit,
     });
 

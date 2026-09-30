@@ -3,6 +3,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { prismaWrite as prisma, prismaRead } from '../db';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { jsonInput } from '../lib/json-input';
 
 export const dashboardRouter = Router();
 
@@ -51,7 +52,15 @@ dashboardRouter.post(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
     const dashboard = await prisma.dashboard.create({
-      data: { ...parsed.data },
+      data: {
+        name: parsed.data.name,
+        ownerId: parsed.data.ownerId,
+        description: parsed.data.description,
+        isPublic: parsed.data.isPublic,
+        layout: jsonInput(parsed.data.layout),
+        theme: jsonInput(parsed.data.theme),
+        tags: parsed.data.tags,
+      },
       include: { widgets: true, collaborators: true },
     });
     res.status(201).json(dashboard);
@@ -136,7 +145,11 @@ dashboardRouter.put(
 
     const dashboard = await prisma.dashboard.update({
       where: { id: req.params.id },
-      data: parsed.data,
+      data: {
+        ...parsed.data,
+        layout: jsonInput(parsed.data.layout),
+        theme: jsonInput(parsed.data.theme),
+      },
       include: { widgets: true, collaborators: true },
     });
     res.json(dashboard);
@@ -192,7 +205,14 @@ dashboardRouter.post(
     if (!existing) return res.status(404).json({ error: 'Dashboard not found' });
 
     const widget = await prisma.dashboardWidget.create({
-      data: { dashboardId: req.params.id, ...parsed.data },
+      data: {
+        dashboardId: req.params.id,
+        type: parsed.data.type,
+        title: parsed.data.title,
+        config: jsonInput(parsed.data.config),
+        position: jsonInput(parsed.data.position),
+        refreshMs: parsed.data.refreshMs,
+      },
     });
     res.status(201).json(widget);
   }),
@@ -211,7 +231,11 @@ dashboardRouter.put(
 
     const widget = await prisma.dashboardWidget.update({
       where: { id: req.params.widgetId },
-      data: parsed.data,
+      data: {
+        ...parsed.data,
+        config: jsonInput(parsed.data.config),
+        position: jsonInput(parsed.data.position),
+      },
     });
     res.json(widget);
   }),
@@ -323,7 +347,11 @@ dashboardRouter.post(
     const collab = await prisma.dashboardCollaborator.upsert({
       where: { dashboardId_userId: { dashboardId: req.params.id, userId: parsed.data.userId } },
       update: { role: parsed.data.role },
-      create: { dashboardId: req.params.id, ...parsed.data },
+      create: {
+        dashboardId: req.params.id,
+        userId: parsed.data.userId,
+        role: parsed.data.role,
+      },
     });
     res.status(201).json(collab);
   }),

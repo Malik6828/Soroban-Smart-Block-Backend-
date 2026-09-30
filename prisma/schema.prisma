@@ -3437,6 +3437,9 @@ model SandboxAccount {
   address String @map("address")
   publicKey String? @map("public_key")
   balance String? @map("balance")
+  label String? @map("label")
+  sequenceNumber Int @map("sequence_number") @default(0)
+  isPreFunded Boolean @map("is_pre_funded") @default(false)
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
 
@@ -3475,7 +3478,10 @@ model SandboxCiRun {
   passed Int? @map("passed")
   failed Int? @map("failed")
   totalTests Int? @map("total_tests")
-  logs String? @map("logs")
+  steps Json? @map("steps")
+  logs Json? @map("logs")
+  result Json? @map("result")
+  completedAt DateTime? @map("completed_at")
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
   @@map("_sandbox_ci_runs")

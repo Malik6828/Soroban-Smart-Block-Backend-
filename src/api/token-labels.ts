@@ -124,7 +124,14 @@ tokenLabelsRouter.put(
       (l) =>
         l.kind === body.data.kind && l.code === body.data.code && l.source === body.data.source,
     );
-    const label: TokenLabel = { ...body.data, updatedAt: new Date().toISOString() };
+    const label: TokenLabel = {
+      kind: body.data.kind,
+      code: body.data.code,
+      severity: body.data.severity,
+      source: body.data.source,
+      reason: body.data.reason,
+      updatedAt: new Date().toISOString(),
+    };
     if (idx >= 0) labels[idx] = label;
     else if (labels.length >= MAX_LABELS_PER_TOKEN) {
       return res.status(409).json({ error: 'Label limit reached for token' });

@@ -348,7 +348,9 @@ yieldRouter.post(
         tokens: Array.isArray(r.tokens) ? (r.tokens as string[]) : [],
         baseApy: r.baseApy,
         incentiveApy: r.incentiveApy,
-        tvl: r.tvl,
+        // The optimizer models TVL as a decimal string (matches the on-chain
+        // indexer contract); the Prisma column is a Float.
+        tvl: String(r.tvl ?? 0),
         lockupDays: r.lockupDays,
         minDeposit: r.minDeposit,
         depositFee: r.depositFee,
@@ -380,8 +382,8 @@ yieldRouter.post(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseAmount(s: string | undefined): number {
-  if (!s) return 0;
+function parseAmount(s: string | number | null | undefined): number {
+  if (s === null || s === undefined || s === '') return 0;
   const n = Number(s);
   return Number.isFinite(n) ? n : 0;
 }
@@ -402,11 +404,12 @@ function serializeOpportunity(r: {
   contractAddress: string;
   name: string;
   type: string;
-  tokens: unknown;
+  tokens: string[];
   baseApy: number;
   incentiveApy: number;
   totalApy: number;
-  tvl: string;
+  // tvl is a Prisma Float column; the serializer exposes it as-is.
+  tvl: number;
   lockupDays: number;
   minDeposit: string;
   depositFee: number;

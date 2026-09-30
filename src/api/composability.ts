@@ -18,6 +18,7 @@ import {
   broadcastCompositionAnalyzed,
 } from '../ws/composabilityBroadcaster';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { jsonInput } from '../lib/json-input';
 
 export const composabilityRouter = Router();
 
@@ -693,10 +694,11 @@ composabilityRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const pattern = await prismaRead.compositionPattern.findUnique({
       where: { id: req.params.id },
-      include: { instances: { take: 20, orderBy: { createdAt: 'desc' } } },
+      include: { patternInstances: { take: 20, orderBy: { createdAt: 'desc' } } },
     });
     if (!pattern) return res.status(404).json({ error: 'Not found' });
-    res.json(pattern);
+    const { patternInstances, ...rest } = pattern;
+    res.json({ ...rest, instances: patternInstances });
   }),
 );
 
@@ -721,9 +723,18 @@ composabilityRouter.post(
         .parse(req.body);
       const pattern = await prismaWrite.compositionPattern.create({
         data: {
-          ...body,
-          detectionRules: (body.detectionRules as object) ?? undefined,
-          safeIf: (body.safeIf as object) ?? undefined,
+          name: body.name,
+          description: body.description,
+          category: body.category,
+          riskRating: body.riskRating,
+          requiredCalls: body.requiredCalls,
+          detectionRules:
+            body.detectionRules === undefined || body.detectionRules === null
+              ? undefined
+              : jsonInput(body.detectionRules),
+          safeIf:
+            body.safeIf === undefined || body.safeIf === null ? undefined : jsonInput(body.safeIf),
+          mitigationGuide: body.mitigationGuide,
         },
       });
       res.status(201).json(pattern);
@@ -1703,9 +1714,14 @@ composabilityRouter.post(
         .parse(req.body);
       const exploit = await prismaWrite.composabilityExploit.create({
         data: {
-          ...body,
+          title: body.title,
+          description: body.description,
+          patternCategory: body.patternCategory,
+          severity: body.severity,
+          cveId: body.cveId,
           affectedContracts: body.affectedContracts ?? [],
           exploitTxHashes: body.exploitTxHashes ?? [],
+          advisoryUrl: body.advisoryUrl,
         },
       });
       res.status(201).json(exploit);

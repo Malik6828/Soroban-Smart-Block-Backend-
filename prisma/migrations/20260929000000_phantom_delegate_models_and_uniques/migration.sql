@@ -73,6 +73,17 @@ ADD COLUMN     "verified" BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "_sandbox_calls" ADD COLUMN     "source_account" TEXT;
 
 -- AlterTable
+ALTER TABLE "_sandbox_accounts" ADD COLUMN     "label" TEXT,
+ADD COLUMN     "sequence_number" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "is_pre_funded" BOOLEAN NOT NULL DEFAULT false;
+
+-- AlterTable
+ALTER TABLE "_sandbox_ci_runs" ADD COLUMN     "steps" JSONB,
+ADD COLUMN     "result" JSONB,
+ADD COLUMN     "completed_at" TIMESTAMP(3);
+ALTER TABLE "_sandbox_ci_runs" ALTER COLUMN "logs" TYPE JSONB USING "logs"::jsonb;
+
+-- AlterTable
 ALTER TABLE "_sandbox_contracts" ADD COLUMN     "deployed_at" TIMESTAMP(3),
 ADD COLUMN     "deployer_account" TEXT,
 ADD COLUMN     "last_called_at" TIMESTAMP(3),

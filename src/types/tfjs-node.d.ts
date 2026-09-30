@@ -33,7 +33,8 @@ declare module '@tensorflow/tfjs-node' {
   };
 
   export const train: {
-    adam(config?: object): unknown;
+    // Accepts either a learning-rate number or a full optimizer config object.
+    adam(learningRateOrConfig?: number | object): unknown;
   };
 
   export interface Tensor {

@@ -120,7 +120,7 @@ export function compressionMiddleware(userConfig?: CompressionConfig) {
       callback?: () => void,
     ): Response {
       // Handle various end() call patterns
-      let actualChunk: Buffer | string | undefined;
+      let _actualChunk: Buffer | string | undefined;
       let actualEncoding: string | undefined;
       let actualCallback: (() => void) | undefined;
 

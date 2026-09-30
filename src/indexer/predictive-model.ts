@@ -173,7 +173,7 @@ export class PredictiveModelService {
       contractDeploymentCount,
       protocolUpgradeFlag,
       externalSignalScore,
-      holidayFlag: holidayFlag ? 1 : 0,
+      holidayFlag,
     };
   }
 
@@ -313,7 +313,7 @@ export class PredictiveModelService {
       features.contractDeploymentCount / 100,
       features.protocolUpgradeFlag ? 1 : 0,
       features.externalSignalScore,
-      features.holidayFlag,
+      features.holidayFlag ? 1 : 0,
     ];
   }
 

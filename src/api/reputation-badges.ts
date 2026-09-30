@@ -154,7 +154,9 @@ reputationBadgesRouter.post('/issue', adminAuth, (req: Request, res: Response) =
   const parsed = IssueSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { subject, subjectType, stats } = parsed.data;
-  res.status(201).json(issueBadges(subject, subjectType, stats));
+  res
+    .status(201)
+    .json(issueBadges(subject, subjectType, stats as Parameters<typeof issueBadges>[2]));
 });
 
 reputationBadgesRouter.get('/verify/:hash', (req: Request, res: Response) => {

@@ -49,7 +49,7 @@ abiRouter.put(
     const parsed = abiBodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    await setCachedAbi(address, parsed.data);
+    await setCachedAbi(address, parsed.data as Parameters<typeof setCachedAbi>[1]);
     res.json({ address, abi: parsed.data });
   }),
 );

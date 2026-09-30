@@ -152,7 +152,30 @@ function formatFull(cert: FullCert, findings: FindingRow[]) {
 }
 
 /** Lightweight row used in history / delta endpoints. */
-function formatSummary(cert: FullCert) {
+type CertSummaryRow = Pick<
+  FullCert,
+  | 'id'
+  | 'version'
+  | 'status'
+  | 'generatedAt'
+  | 'expiresAt'
+  | 'overallScore'
+  | 'securityScore'
+  | 'governanceScore'
+  | 'economicScore'
+  | 'complianceScore'
+  | 'liquidityScore'
+  | 'totalFindings'
+  | 'criticalFindings'
+  | 'highFindings'
+  | 'mediumFindings'
+  | 'lowFindings'
+  | 'openFindings'
+  | 'resolvedFindings'
+  | 'certificateHash'
+>;
+
+function formatSummary(cert: CertSummaryRow) {
   const score = cert.overallScore;
   return {
     certificateId: cert.id,
@@ -817,6 +840,7 @@ contractAuditRouter.get(
           version: true,
           status: true,
           generatedAt: true,
+          expiresAt: true,
           overallScore: true,
           securityScore: true,
           governanceScore: true,

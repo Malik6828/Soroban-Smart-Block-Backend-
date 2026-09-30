@@ -11,6 +11,7 @@ import { prismaRead, prismaWrite } from '../db';
 import { logger } from '../logger';
 import { config } from '../config';
 import { safeGet, SsrfBlockedError } from '../webhooks/ssrf-guard';
+import { jsonInput } from '../lib/json-input';
 
 const FETCH_TIMEOUT_MS = 10_000;
 const METADATA_TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -122,7 +123,7 @@ export async function fetchAndStoreItemMetadata(itemId: string): Promise<void> {
     await prismaWrite.nftItem.update({
       where: { id: itemId },
       data: {
-        metadata,
+        metadata: jsonInput(metadata),
         metadataFetchedAt: new Date(),
       },
     });

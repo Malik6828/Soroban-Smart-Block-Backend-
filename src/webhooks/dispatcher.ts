@@ -114,8 +114,18 @@ export const DISPATCH_PAGE_SIZE = parseInt(process.env.WEBHOOK_DISPATCH_PAGE_SIZ
  * Concurrency is bounded by DISPATCH_CONCURRENCY (#483).
  */
 export async function dispatchWebhooks(event: WebhookPayload): Promise<void> {
-  // Collect all matching subscriptions via cursor-based pagination (#724)
-  const allSubs: Awaited<ReturnType<typeof prismaRead.webhookSubscription.findMany>> = [];
+  // Collect all matching subscriptions via cursor-based pagination (#724).
+  // Typed to the projected row shape rather than the full model.
+  type DispatchSubscription = {
+    id: string;
+    url: string;
+    secret: string;
+    eventType: string;
+    topicSymbol: string | null;
+    storeResponseBody: boolean;
+    responseRetentionDays: number;
+  };
+  const allSubs: DispatchSubscription[] = [];
   let cursor: string | undefined;
   let hasMore = true;
 

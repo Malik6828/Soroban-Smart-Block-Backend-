@@ -211,8 +211,8 @@ async function ensurePool(
     return {
       tokenA: existing.tokenA,
       tokenB: existing.tokenB,
-      reserveA: BigInt(existing.reserveA),
-      reserveB: BigInt(existing.reserveB),
+      reserveA: BigInt(existing.reserveA.toString()),
+      reserveB: BigInt(existing.reserveB.toString()),
       feeBps: existing.feeBps,
     };
   }
@@ -227,6 +227,8 @@ async function ensurePool(
   await prisma.dexPool.create({
     data: {
       poolAddress,
+      // `address` is the on-chain pool address (same value the API uses).
+      address: poolAddress,
       protocol,
       tokenA,
       tokenB,

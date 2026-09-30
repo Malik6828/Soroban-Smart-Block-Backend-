@@ -1,7 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { sandboxEngine } from '../sandbox/runtime';
+import type {
+  CallInput,
+  CiStep,
+  DeployInput,
+  FundAccountInput,
+  FuzzCampaignConfig,
+  FuzzStrategy,
+  SnapshotInput,
+} from '../sandbox/runtime';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { parseInput } from '../lib/parse-input';
 
 /**
  * @swagger
@@ -649,7 +659,10 @@ sandboxRouter.post(
   '/session/:sessionId/snapshot',
   asyncHandler(async (req, res) => {
     try {
-      const body = snapshotSchema.parse({ sessionId: getSessionId(req.params), ...req.body });
+      const body = parseInput<SnapshotInput>(snapshotSchema, {
+        sessionId: getSessionId(req.params),
+        ...req.body,
+      });
       res.status(201).json(await sandboxEngine.snapshotSession(body));
     } catch (error) {
       handleError(res, error);
@@ -848,7 +861,10 @@ sandboxRouter.post(
   asyncHandler(async (req, res) => {
     try {
       res.json(
-        await sandboxEngine.fundAccount(getSessionId(req.params), fundSchema.parse(req.body)),
+        await sandboxEngine.fundAccount(
+          getSessionId(req.params),
+          parseInput<FundAccountInput>(fundSchema, req.body),
+        ),
       );
     } catch (error) {
       handleError(res, error);
@@ -1080,7 +1096,9 @@ sandboxRouter.post(
   '/deploy',
   asyncHandler(async (req, res) => {
     try {
-      res.status(201).json(await sandboxEngine.deploy(deploySchema.parse(req.body)));
+      res
+        .status(201)
+        .json(await sandboxEngine.deploy(parseInput<DeployInput>(deploySchema, req.body)));
     } catch (error) {
       handleError(res, error);
     }
@@ -1136,7 +1154,11 @@ sandboxRouter.post(
   '/deploy-from-template',
   asyncHandler(async (req, res) => {
     try {
-      res.status(201).json(await sandboxEngine.deployFromTemplate(deploySchema.parse(req.body)));
+      res
+        .status(201)
+        .json(
+          await sandboxEngine.deployFromTemplate(parseInput<DeployInput>(deploySchema, req.body)),
+        );
     } catch (error) {
       handleError(res, error);
     }
@@ -1188,9 +1210,16 @@ sandboxRouter.post(
   '/deploy-from-mainnet',
   asyncHandler(async (req, res) => {
     try {
-      res
-        .status(201)
-        .json(await sandboxEngine.deployFromMainnet(deployMainnetSchema.parse(req.body)));
+      res.status(201).json(
+        await sandboxEngine.deployFromMainnet(
+          parseInput<{
+            sessionId: string;
+            contractAddress: string;
+            name?: string;
+            deployer?: string;
+          }>(deployMainnetSchema, req.body),
+        ),
+      );
     } catch (error) {
       handleError(res, error);
     }
@@ -1249,7 +1278,7 @@ sandboxRouter.post(
   '/call',
   asyncHandler(async (req, res) => {
     try {
-      res.json(await sandboxEngine.call(callSchema.parse(req.body)));
+      res.json(await sandboxEngine.call(parseInput<CallInput>(callSchema, req.body)));
     } catch (error) {
       handleError(res, error);
     }
@@ -1316,7 +1345,10 @@ sandboxRouter.post(
   '/call-batch',
   asyncHandler(async (req, res) => {
     try {
-      const body = batchCallSchema.parse(req.body);
+      const body = parseInput<{
+        sessionId: string;
+        calls: Array<Omit<CallInput, 'sessionId'>>;
+      }>(batchCallSchema, req.body);
       res.json(await sandboxEngine.callBatch(body.sessionId, body.calls));
     } catch (error) {
       handleError(res, error);
@@ -1845,7 +1877,11 @@ sandboxRouter.post(
   '/compare',
   asyncHandler(async (req, res) => {
     try {
-      res.json(await sandboxEngine.compare(compareSchema.parse(req.body)));
+      res.json(
+        await sandboxEngine.compare(
+          parseInput<{ sessionId?: string; left: string; right: string }>(compareSchema, req.body),
+        ),
+      );
     } catch (error) {
       handleError(res, error);
     }
@@ -1977,7 +2013,22 @@ sandboxRouter.post(
   '/fuzz/start',
   asyncHandler(async (req, res) => {
     try {
-      res.status(201).json(await sandboxEngine.startFuzz(fuzzStartSchema.parse(req.body)));
+      const body = parseInput<{
+        sessionId: string;
+        contract: string;
+        strategies: FuzzStrategy[];
+        timeoutSeconds?: number;
+        stopOnFirst?: string;
+      }>(fuzzStartSchema, req.body);
+      res.status(201).json(
+        await sandboxEngine.startFuzz({
+          sessionId: body.sessionId,
+          contractId: body.contract,
+          strategies: body.strategies,
+          timeoutSeconds: body.timeoutSeconds,
+          stopOnFirst: body.stopOnFirst,
+        }),
+      );
     } catch (error) {
       handleError(res, error);
     }
@@ -2047,7 +2098,11 @@ sandboxRouter.post(
   '/fuzz/:contractId',
   asyncHandler(async (req, res) => {
     try {
-      const payload = fuzzCampaignSchema.parse({
+      const payload = parseInput<{
+        sessionId: string;
+        contractId: string;
+        config?: FuzzCampaignConfig;
+      }>(fuzzCampaignSchema, {
         sessionId: req.body?.sessionId,
         contractId: req.params.contractId,
         config: req.body?.config,
@@ -2309,7 +2364,16 @@ sandboxRouter.post(
   '/ci/execute',
   asyncHandler(async (req, res) => {
     try {
-      res.status(201).json(await sandboxEngine.executeCi(ciSchema.parse(req.body)));
+      res.status(201).json(
+        await sandboxEngine.executeCi(
+          parseInput<{
+            steps: CiStep[];
+            timeout?: number;
+            onFailure?: string;
+            sessionId?: string;
+          }>(ciSchema, req.body),
+        ),
+      );
     } catch (error) {
       handleError(res, error);
     }
@@ -2738,7 +2802,12 @@ sandboxRouter.post(
   '/verify/assertion',
   asyncHandler(async (req, res) => {
     try {
-      const body = assertionSchema.parse(req.body);
+      const body = parseInput<{
+        sessionId: string;
+        contract: string;
+        assertion: string;
+        checker?: string;
+      }>(assertionSchema, req.body);
       res.json(await sandboxEngine.verifyAssertion(body.sessionId, body));
     } catch (error) {
       handleError(res, error);

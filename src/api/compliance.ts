@@ -371,7 +371,9 @@ complianceRouter.post(
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const result = await compliance.submitTravelRule(parsed.data);
+    const result = await compliance.submitTravelRule(
+      parsed.data as Parameters<typeof compliance.submitTravelRule>[0],
+    );
     res.status(201).json(result);
   }),
 );
@@ -549,7 +551,9 @@ complianceRouter.post(
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const rule = compliance.createBlockingRule(parsed.data);
+    const rule = compliance.createBlockingRule(
+      parsed.data as Parameters<typeof compliance.createBlockingRule>[0],
+    );
     res.status(201).json(rule);
   }),
 );
@@ -634,7 +638,9 @@ complianceRouter.post(
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const report = await compliance.generateSarReport(parsed.data);
+    const report = await compliance.generateSarReport(
+      parsed.data as Parameters<typeof compliance.generateSarReport>[0],
+    );
     res.status(201).json(report);
   }),
 );

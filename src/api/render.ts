@@ -80,7 +80,9 @@ renderRouter.post('/', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Provide either `template` or `fnName`' });
   }
 
-  const result = template ? renderTemplate(template, ctx) : renderBuiltIn(fnName!, ctx);
+  const result = template
+    ? renderTemplate(template, ctx as Parameters<typeof renderTemplate>[1])
+    : renderBuiltIn(fnName!, ctx as Parameters<typeof renderBuiltIn>[1]);
 
   res.json({ result });
 });
