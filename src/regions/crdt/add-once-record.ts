@@ -51,14 +51,20 @@ export class AddOnceRecord<TImmutable, TMutable extends Record<string, unknown>>
     value: TMutable[K],
     timestamp: HlcTimestamp,
   ): AddOnceRecord<TImmutable, TMutable> {
+    const mutable: AddOnceRecordState<TImmutable, TMutable>['mutable'] = {
+      ...this.state.mutable,
+      [field]: { value, timestamp },
+    };
     return new AddOnceRecord({
       immutable: this.state.immutable,
-      mutable: { ...this.state.mutable, [field]: { value, timestamp } },
+      mutable,
     });
   }
 
   merge(other: AddOnceRecordState<TImmutable, TMutable>): AddOnceRecord<TImmutable, TMutable> {
-    const mergedMutable = { ...this.state.mutable };
+    const mergedMutable: AddOnceRecordState<TImmutable, TMutable>['mutable'] = {
+      ...this.state.mutable,
+    };
     for (const key of Object.keys(other.mutable) as Array<keyof TMutable>) {
       const ours = mergedMutable[key];
       const theirs = other.mutable[key];

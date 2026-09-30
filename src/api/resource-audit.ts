@@ -10,6 +10,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prismaRead } from '../db';
 import { asyncHandler } from '../middleware/asyncHandler';
 
@@ -318,11 +319,17 @@ resourceAuditRouter.get(
       return res.json({
         metric,
         limit,
-        contracts: rows.map((r) => ({
-          contractAddress: r.contractAddress,
-          totalFeesLumens: parseFloat((Number(r._sum.feeCharged ?? 0) / 1e7).toFixed(7)),
-          totalInvocations: r._count.id,
-        })),
+        contracts: rows.map(
+          (r: {
+            contractAddress: string | null;
+            _sum: { feeCharged: number | null };
+            _count: { id: number };
+          }) => ({
+            contractAddress: r.contractAddress,
+            totalFeesLumens: parseFloat((Number(r._sum.feeCharged ?? 0) / 1e7).toFixed(7)),
+            totalInvocations: r._count.id,
+          }),
+        ),
       });
     }
 
@@ -335,21 +342,29 @@ resourceAuditRouter.get(
           : 'storageFootprint'; // write_bytes/events_bytes fall back to storageFootprint
 
     const rows = await prismaRead.contractResourceMetric.groupBy({
-      by: ['contractAddress'],
-      _sum: { [prismaField]: true } as any,
+      by: ['contractAddress'] as Prisma.ContractResourceMetricScalarFieldEnum[],
+      _sum: { [prismaField]: true } as Prisma.ContractResourceMetricSumAggregateInputType,
       _count: { id: true },
-      orderBy: { _sum: { [prismaField]: 'desc' } } as any,
+      orderBy: {
+        _sum: { [prismaField]: 'desc' },
+      } as Prisma.ContractResourceMetricOrderByWithAggregationInput,
       take: limit,
     });
 
     res.json({
       metric,
       limit,
-      contracts: rows.map((r) => ({
-        contractAddress: r.contractAddress,
-        total: Number((r._sum as any)[prismaField] ?? 0),
-        totalInvocations: r._count.id,
-      })),
+      contracts: rows.map(
+        (r: {
+          contractAddress: string | null;
+          _sum: Record<string, unknown>;
+          _count: { id: number };
+        }) => ({
+          contractAddress: r.contractAddress,
+          total: Number((r._sum as Record<string, unknown>)[prismaField] ?? 0),
+          totalInvocations: r._count.id,
+        }),
+      ),
     });
   }),
 );

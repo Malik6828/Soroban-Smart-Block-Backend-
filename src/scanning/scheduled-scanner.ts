@@ -38,9 +38,11 @@ export interface ScanChange {
   riskScore: number;
 }
 
-const REENTRANCY_RE = /(withdraw|redeem|claim|flash|callback|invoke|call_contract|swap|transfer_from)/i;
+const REENTRANCY_RE =
+  /(withdraw|redeem|claim|flash|callback|invoke|call_contract|swap|transfer_from)/i;
 const OVERFLOW_RE = /(add|sub|mul|pow|shl|scale|multiply|accrue|compound|mint|burn)/i;
-const PRIVILEGED_RE = /(upgrade|set_admin|transfer_ownership|pause|unpause|freeze|set_fee|mint|clawback|migrate|update_wasm)/i;
+const PRIVILEGED_RE =
+  /(upgrade|set_admin|transfer_ownership|pause|unpause|freeze|set_fee|mint|clawback|migrate|update_wasm)/i;
 
 const SEVERITY_WEIGHT: Record<RiskSeverity, number> = { low: 5, medium: 15, high: 30 };
 const MAX_FEED = 1000;
@@ -88,7 +90,10 @@ export function analyzeFunctions(functionNames: string[]): RiskFinding[] {
 }
 
 export function scoreFindings(findings: RiskFinding[]): number {
-  return Math.min(100, findings.reduce((sum, f) => sum + SEVERITY_WEIGHT[f.severity], 0));
+  return Math.min(
+    100,
+    findings.reduce((sum, f) => sum + SEVERITY_WEIGHT[f.severity], 0),
+  );
 }
 
 export class RiskStore {
@@ -111,8 +116,7 @@ export class RiskStore {
   put(record: ScanRecord): ScanChange | null {
     const prev = this.records.get(record.contractAddress);
     this.records.set(record.contractAddress, record);
-    const sameFindings =
-      prev && JSON.stringify(prev.findings) === JSON.stringify(record.findings);
+    const sameFindings = prev && JSON.stringify(prev.findings) === JSON.stringify(record.findings);
     if (sameFindings) return null;
     const change: ScanChange = {
       seq: ++this.seq,

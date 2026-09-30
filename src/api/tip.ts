@@ -159,7 +159,6 @@ tipRouter.get(
         skip,
         take: parseInt(limit),
         orderBy: { createdAt: 'desc' },
-        include: { source: { select: { name: true } } },
       }),
       db.threatAdvisory.count({ where }),
     ]);
@@ -215,12 +214,23 @@ tipRouter.get(
 tipRouter.get(
   '/advisories/:id',
   asyncHandler(async (req: Request, res: Response) => {
+    // ThreatAdvisory has no Prisma relation fields for its reviews/comments
+    // (the models only carry the `advisoryId` scalar), so load them explicitly.
     const advisory = await db.threatAdvisory.findUnique({
       where: { id: req.params.id },
-      include: { source: true, correlations: true, reviews: true, comments: true },
     });
     if (!advisory) return res.status(404).json({ error: 'Not found' });
-    res.json(advisory);
+    const [reviews, comments] = await Promise.all([
+      db.threatReview.findMany({
+        where: { advisoryId: advisory.id },
+        orderBy: { createdAt: 'asc' },
+      }),
+      db.threatComment.findMany({
+        where: { advisoryId: advisory.id },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+    res.json({ ...advisory, reviews, comments });
   }),
 );
 
@@ -288,7 +298,10 @@ tipRouter.post(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
     const submittedBy = (req.headers['x-api-key'] as string) ?? 'anonymous';
-    const id = await submitManual({ ...parsed.data, submittedBy });
+    const id = await submitManual({
+      ...parsed.data,
+      submittedBy,
+    } as Parameters<typeof submitManual>[0]);
 
     const advisory = await db.threatAdvisory.findUnique({ where: { id } });
     await dispatchNotifications({
@@ -362,6 +375,7 @@ tipRouter.patch(
       where: { id: req.params.id },
       data: {
         ...parsed.data,
+        mitigations: parsed.data.mitigations?.join('; '),
         resolvedAt: parsed.data.resolvedAt ? new Date(parsed.data.resolvedAt) : undefined,
       },
     });
@@ -468,7 +482,13 @@ tipRouter.post(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
     const review = await db.threatReview.create({
-      data: { advisoryId: req.params.id, ...parsed.data },
+      data: {
+        advisoryId: req.params.id,
+        role: parsed.data.role,
+        decision: parsed.data.decision,
+        notes: parsed.data.notes,
+        reviewerKey: parsed.data.reviewerKey,
+      },
     });
 
     // Auto-promote status on approval
@@ -715,8 +735,10 @@ tipRouter.post(
       update: { active: true, filters: (parsed.data.filters ?? null) as Prisma.InputJsonValue },
       create: {
         id: uuidv7(),
-        ...parsed.data,
+        channel: parsed.data.channel,
+        target: parsed.data.target,
         filters: (parsed.data.filters ?? null) as Prisma.InputJsonValue,
+        active: true,
       },
     });
     res.status(201).json(sub);
@@ -847,7 +869,13 @@ tipRouter.post(
     const wh = await db.tipWebhook.upsert({
       where: { url: parsed.data.url },
       update: { ...parsed.data },
-      create: { id: uuidv7(), ...parsed.data },
+      create: {
+        id: uuidv7(),
+        url: parsed.data.url,
+        secret: parsed.data.secret,
+        events: parsed.data.events,
+        active: true,
+      },
     });
     res.status(201).json({ id: wh.id, url: wh.url });
   }),

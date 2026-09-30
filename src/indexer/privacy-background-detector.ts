@@ -119,7 +119,7 @@ async function runAnalyticsAggregation(period: string): Promise<void> {
       period,
       totalPrivateTx: privateTxs.length,
       totalTx: totalTxCount,
-      totalVolume: String(totalVolume),
+      totalVolume,
       privacyShare: totalTxCount > 0 ? privateTxs.length / totalTxCount : 0,
       volumeShare:
         totalTxCount > 0
@@ -151,7 +151,7 @@ async function runAnalyticsAggregation(period: string): Promise<void> {
         timestamp: now,
         period,
         txCount: count,
-        volume: String(protoTxs.reduce((a, t) => a + (Number(t.totalValue) || 0), 0)),
+        volume: protoTxs.reduce((a, t) => a + (Number(t.totalValue) || 0), 0),
         uniqueUsers: protoUsers.size,
         uniqueContracts: new Set(protoTxs.flatMap((t) => t.contractAddresses)).size,
         avgAnonymitySet:

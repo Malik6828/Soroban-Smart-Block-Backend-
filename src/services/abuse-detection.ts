@@ -227,7 +227,7 @@ export async function isIpBlocked(ip: string): Promise<boolean> {
         resolvedAt: null,
       },
     })
-    .catch(() => null);
+    .catch((): null => null);
   return !!block;
 }
 
@@ -242,7 +242,7 @@ export async function isKeyBlocked(apiKeyId: string): Promise<boolean> {
         resolvedAt: null,
       },
     })
-    .catch(() => null);
+    .catch((): null => null);
   return !!block;
 }
 

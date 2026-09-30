@@ -343,7 +343,7 @@ export async function startEmergencyIndexer(): Promise<void> {
         take: 50,
       });
       for (const c of unanalysed) {
-        await analyzeContract(c.address).catch(() => null);
+        await analyzeContract(c.address).catch((): null => null);
       }
     } catch (err) {
       logger.error('Emergency indexer tick failed', { error: String(err) });

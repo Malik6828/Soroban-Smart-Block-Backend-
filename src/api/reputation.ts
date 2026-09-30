@@ -1848,11 +1848,11 @@ reputationRouter.post(
       create: {
         delegator: canonicalAddress(delegator),
         delegatee: canonicalAddress(delegatee),
-        amount: amount ? Number(amount) : null,
+        amount: amount ? String(amount) : null,
       },
       update: {
         delegatee: canonicalAddress(delegatee),
-        amount: amount ? Number(amount) : null,
+        amount: amount ? String(amount) : null,
       },
     });
 

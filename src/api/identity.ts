@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prismaWrite as prisma, prismaRead } from '../db';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { jsonInput } from '../lib/json-input';
 
 export const identityRouter = Router();
 
@@ -19,7 +21,7 @@ const SUPPORTED_CHAINS = [
   'optimism',
   'avalanche',
 ] as const;
-type Chain = (typeof SUPPORTED_CHAINS)[number];
+type _Chain = (typeof SUPPORTED_CHAINS)[number];
 
 const createIdentitySchema = z.object({
   ownerId: z.string().optional(),
@@ -67,7 +69,10 @@ identityRouter.post(
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
     const identity = await prisma.identityGraph.create({
-      data: parsed.data,
+      data: {
+        ...parsed.data,
+        metadata: jsonInput(parsed.data.metadata),
+      },
       include: { addresses: true },
     });
     res.status(201).json(identity);
@@ -109,7 +114,10 @@ identityRouter.put(
 
     const identity = await prisma.identityGraph.update({
       where: { id: req.params.id },
-      data: parsed.data,
+      data: {
+        ...parsed.data,
+        metadata: jsonInput(parsed.data.metadata),
+      },
       include: { addresses: true },
     });
     res.json(identity);
@@ -151,10 +159,17 @@ identityRouter.post(
       where: { chain_address: { chain: parsed.data.chain, address: parsed.data.address } },
       update: {
         label: parsed.data.label,
-        metadata: parsed.data.metadata,
+        metadata: parsed.data.metadata as Prisma.InputJsonValue,
         identityId: req.params.id,
       },
-      create: { identityId: req.params.id, ...parsed.data },
+      create: {
+        identityId: req.params.id,
+        chain: parsed.data.chain,
+        address: parsed.data.address,
+        label: parsed.data.label,
+        verifyProof: parsed.data.verifyProof,
+        metadata: jsonInput(parsed.data.metadata),
+      },
     });
     res.status(201).json(chainAddress);
   }),
@@ -201,9 +216,15 @@ identityRouter.post(
       update: {
         linkType: parsed.data.linkType,
         confidence: parsed.data.confidence,
-        evidence: parsed.data.evidence,
+        evidence: parsed.data.evidence as Prisma.InputJsonValue,
       },
-      create: { sourceIdentityId: req.params.id, ...parsed.data },
+      create: {
+        sourceIdentityId: req.params.id,
+        targetIdentityId: parsed.data.targetIdentityId,
+        linkType: parsed.data.linkType,
+        confidence: parsed.data.confidence,
+        evidence: jsonInput(parsed.data.evidence),
+      },
     });
     res.status(201).json(link);
   }),
@@ -413,8 +434,18 @@ identityRouter.post(
 
     const bridge = await prisma.bridgeTransfer.create({
       data: {
-        ...parsed.data,
+        fromChain: parsed.data.fromChain,
+        toChain: parsed.data.toChain,
+        fromAddress: parsed.data.fromAddress,
+        toAddress: parsed.data.toAddress,
+        asset: parsed.data.asset,
+        amount: parsed.data.amount,
+        bridgeProtocol: parsed.data.bridgeProtocol,
+        txHashSource: parsed.data.txHashSource,
+        txHashDest: parsed.data.txHashDest,
+        status: parsed.data.status,
         timestamp: new Date(parsed.data.timestamp),
+        metadata: jsonInput(parsed.data.metadata),
         fromAddressId: fromAddr?.id ?? null,
         toAddressId: toAddr?.id ?? null,
       },
@@ -520,6 +551,7 @@ identityRouter.put(
       where: { id: req.params.id },
       data: {
         ...parsed.data,
+        metadata: jsonInput(parsed.data.metadata),
         ...(parsed.data.timestamp ? { timestamp: new Date(parsed.data.timestamp) } : {}),
       },
     });

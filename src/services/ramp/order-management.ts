@@ -9,6 +9,7 @@
  * code should write directly to ramp_orders.
  */
 
+import { Prisma } from '@prisma/client';
 import { prismaWrite, prismaRead } from '../../db';
 import { logger } from '../../logger';
 import type { OrderStatus, ProviderName, RampDirection, CryptoAsset, PaymentMethod } from './types';
@@ -201,7 +202,13 @@ async function appendEvent(
 ): Promise<void> {
   try {
     await prismaWrite.rampOrderEvent.create({
-      data: { orderId, fromStatus, toStatus, triggeredBy, payload },
+      data: {
+        orderId,
+        fromStatus,
+        toStatus,
+        triggeredBy,
+        payload: payload as Prisma.InputJsonValue,
+      },
     });
   } catch (err) {
     logger.error('[ramp-order] event append failed', { error: String(err), orderId });

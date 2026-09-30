@@ -229,8 +229,11 @@ publicDatasetsRouter.post('/:dataset/manifests', adminAuth, (req: Request, res: 
     }
   }
   const files: DatasetFile[] = parsed.data.files.map((f) => ({
-    ...f,
+    path: f.path,
     format: f.path.endsWith('.parquet') ? 'parquet' : 'csv',
+    rows: f.rows,
+    bytes: f.bytes,
+    sha256: f.sha256,
     url: `${baseUrl()}/${def.id}/${f.path}`,
   }));
   const publishedAt = new Date().toISOString();
@@ -241,7 +244,10 @@ publicDatasetsRouter.post('/:dataset/manifests', adminAuth, (req: Request, res: 
       .slice(0, 16),
     dataset: def.id,
     schemaVersion: SCHEMA_VERSION,
-    ledgerRange: parsed.data.ledgerRange,
+    ledgerRange: {
+      from: parsed.data.ledgerRange.from,
+      to: parsed.data.ledgerRange.to,
+    },
     files,
     totalRows: files.reduce((s, f) => s + f.rows, 0),
     totalBytes: files.reduce((s, f) => s + f.bytes, 0),

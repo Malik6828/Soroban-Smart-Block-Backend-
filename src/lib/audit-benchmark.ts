@@ -117,7 +117,7 @@ export async function getContractTvl(contractAddress: string): Promise<number> {
   ]);
 
   if (yieldOpp?.tvl) {
-    const v = parseFloat(yieldOpp.tvl);
+    const v = yieldOpp.tvl;
     if (!isNaN(v) && v > 0) return v;
   }
   return portfolio?.valueUsd ?? 0;

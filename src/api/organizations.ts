@@ -211,9 +211,7 @@ organizationsRouter.post('/:orgId/keys', (req: Request, res: Response) => {
   if (!org) return;
   const keyId = req.apiKey!.id;
   if (keyOwner.has(keyId)) {
-    return res
-      .status(409)
-      .json({ error: 'Key already belongs to an organization; use transfer' });
+    return res.status(409).json({ error: 'Key already belongs to an organization; use transfer' });
   }
   keyOwner.set(keyId, org.id);
   org.keyIds.push(keyId);

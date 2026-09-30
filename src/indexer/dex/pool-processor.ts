@@ -96,8 +96,10 @@ export class DexAnalyticsProcessor {
         select: { priceUsd: true },
       }),
     ]);
-    const priceA = priceARow?.priceUsd ?? null;
-    const priceB = priceBRow?.priceUsd ?? null;
+    // tokenPrice.priceUsd is a Prisma Decimal; the analytics helpers and the
+    // DexPool/PoolSnapshot *Usd columns are plain numbers.
+    const priceA = priceARow?.priceUsd != null ? Number(priceARow.priceUsd) : null;
+    const priceB = priceBRow?.priceUsd != null ? Number(priceBRow.priceUsd) : null;
 
     const reserveAHuman = toHuman(BigInt(pool.reserveA.toString()), pool.tokenADecimals);
     const reserveBHuman = toHuman(BigInt(pool.reserveB.toString()), pool.tokenBDecimals);
@@ -159,8 +161,8 @@ export class DexAnalyticsProcessor {
       data: {
         poolAddress,
         ledgerSequence: pool.lastEventLedger ?? undefined,
-        reserveA: pool.reserveA,
-        reserveB: pool.reserveB,
+        reserveA: pool.reserveA.toString(),
+        reserveB: pool.reserveB.toString(),
         tvlUsd: tvl,
         volume24hUsd: volume24h,
         fees24hUsd: fees24h,
@@ -210,11 +212,7 @@ export class DexAnalyticsProcessor {
     }
 
     this.logger.info(
-      '[dex-analytics] Scheduling with interval',
-      INTERVAL_MS,
-      'ms (cron:',
-      cronExpression,
-      ')',
+      `[dex-analytics] Scheduling with interval ${INTERVAL_MS}ms (cron: ${cronExpression})`,
     );
 
     // Run immediately first

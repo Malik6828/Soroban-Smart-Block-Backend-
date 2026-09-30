@@ -5,6 +5,9 @@ import {
   readContract,
   buildSignableTransaction,
   submitTransaction,
+  type BuildTxRequest,
+  type ReadRequest,
+  type SubmitRequest,
 } from '../playground/tx-builder';
 import { prismaRead } from '../db';
 import { asyncHandler } from '../middleware/asyncHandler';
@@ -80,7 +83,9 @@ playgroundRouter.post(
     const parsed = readRequestSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const result = await readContract(address, parsed.data);
+    // Zod widens parsed object properties to optional while strictNullChecks
+    // is off; re-assert the request contract here.
+    const result = await readContract(address, parsed.data as ReadRequest);
     const status = result.success ? 200 : 400;
     return res.status(status).json(result);
   }),
@@ -97,7 +102,7 @@ playgroundRouter.post(
     const parsed = buildTxSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const result = await buildSignableTransaction(address, parsed.data);
+    const result = await buildSignableTransaction(address, parsed.data as BuildTxRequest);
     const status = result.simulationSuccess ? 200 : 400;
     return res.status(status).json({
       ...result,
@@ -124,7 +129,7 @@ playgroundRouter.post(
     const parsed = buildTxSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const result = await buildSignableTransaction(address, parsed.data);
+    const result = await buildSignableTransaction(address, parsed.data as BuildTxRequest);
     if (!result.simulationSuccess) {
       return res.status(400).json({ error: result.error });
     }
@@ -148,7 +153,7 @@ playgroundRouter.post(
     const parsed = submitSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const result = await submitTransaction(parsed.data);
+    const result = await submitTransaction(parsed.data as SubmitRequest);
     const status = result.status === 'error' ? 400 : 200;
     return res.status(status).json(result);
   }),
@@ -171,8 +176,13 @@ playgroundRouter.get(
           ...(fn ? { functionName: fn } : {}),
           functionArgs: { not: undefined },
         },
-        select: { functionName: true, functionArgs: true, ledger: true, hash: true },
-        orderBy: { ledger: 'desc' },
+        select: {
+          functionName: true,
+          functionArgs: true,
+          ledgerSequence: true,
+          hash: true,
+        },
+        orderBy: { ledgerSequence: 'desc' },
         take: 20,
       });
 
@@ -181,7 +191,7 @@ playgroundRouter.get(
         examples: txs.map((t) => ({
           functionName: t.functionName,
           args: t.functionArgs,
-          ledger: t.ledger,
+          ledger: t.ledgerSequence,
           txHash: t.hash,
         })),
       });

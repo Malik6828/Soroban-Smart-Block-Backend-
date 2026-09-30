@@ -476,17 +476,20 @@ export function createLeaderboard(
   limit = 10,
 ): LeaderboardEntry[] {
   const grouped = groupByAddress(chainData);
-  const entries = Array.from(grouped.entries()).map(([address, items]) => {
-    const result = buildScoreResult(address, items, []);
-    return {
-      address,
-      score: result.score,
-      activeChains: result.activeChains.length,
-      linkedAddresses: result.linkedAddresses,
-      badges: [],
-      sybilRisk: result.sybil.risk,
-    };
-  });
+  // `rank` is assigned after sorting below, so build unranked entries first.
+  const entries: Omit<LeaderboardEntry, 'rank'>[] = Array.from(grouped.entries()).map(
+    ([address, items]) => {
+      const result = buildScoreResult(address, items, []);
+      return {
+        address,
+        score: result.score,
+        activeChains: result.activeChains.length,
+        linkedAddresses: result.linkedAddresses,
+        badges: [] as string[],
+        sybilRisk: result.sybil.risk,
+      };
+    },
+  );
 
   const filtered = entries.filter((entry) => {
     if (category === 'sybil_resistant') return entry.sybilRisk < 0.5;

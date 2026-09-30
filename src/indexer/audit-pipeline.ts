@@ -32,7 +32,8 @@ import { anchorCertificateForPipeline } from '../lib/anchor-service';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type TriggerType = 'initial' | 'upgrade' | 'dependency' | 'daily' | 'weekly' | 'manual';
+export type TriggerType =
+  'initial' | 'upgrade' | 'dependency' | 'daily' | 'weekly' | 'manual' | 'scheduled';
 
 export type AuditMode = 'full' | 'incremental';
 

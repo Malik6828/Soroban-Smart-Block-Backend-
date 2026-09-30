@@ -56,9 +56,20 @@ dtccSettlementRouter.post(
       const data = createSchema.parse(req.body);
       const record = await prisma.dtccSettlementBridge.create({
         data: {
-          ...data,
+          transactionHash: data.transactionHash,
+          dtccSettlementId: data.dtccSettlementId,
+          securityId: data.securityId,
+          securityType: data.securityType,
+          sellerAddress: data.sellerAddress,
+          buyerAddress: data.buyerAddress,
+          quantity: data.quantity,
+          settlementAmount: data.settlementAmount,
+          currency: data.currency,
+          contractAddress: data.contractAddress ?? '',
           settlementDate: data.settlementDate ? new Date(data.settlementDate) : undefined,
+          ledgerSequence: data.ledgerSequence,
           ledgerCloseTime: new Date(data.ledgerCloseTime),
+          settlementStatus: 'pending',
         },
       });
       res.status(201).json(record);

@@ -138,7 +138,8 @@ async function scoreSecurityDimension(contractAddress: string): Promise<{
       severity: sev,
       title: adv.title,
       description: `Threat advisory: ${adv.title}`,
-      recommendation: (adv.mitigations ?? []).join('; ') || undefined,
+      // `mitigations` is a single delimited string column, not a string[].
+      recommendation: adv.mitigations || undefined,
       cvssScore: adv.cvssScore ?? undefined,
       cweId: adv.cveId ?? undefined,
     });
@@ -325,7 +326,7 @@ async function scoreEconomicDimension(contractAddress: string): Promise<{
     }),
   ]);
 
-  const tvlCurrent = portfolio?.valueUsd ?? parseFloat(yieldOpp?.tvl ?? '0');
+  const tvlCurrent = portfolio?.valueUsd ?? yieldOpp?.tvl ?? 0;
   const tvlPrev = prevPortfolio?.valueUsd ?? 0;
   const tvl30dTrend = tvlPrev > 0 ? ((tvlCurrent - tvlPrev) / tvlPrev) * 100 : 0;
 
@@ -536,7 +537,7 @@ async function scoreLiquidityDimension(contractAddress: string): Promise<{
 
   const poolLiquidity = dexPool?.totalLiquidity
     ? Number(dexPool.totalLiquidity)
-    : parseFloat(yieldOpp?.tvl ?? '0');
+    : (yieldOpp?.tvl ?? 0);
 
   // Near-zero liquidity
   if (poolLiquidity < 1000 && (dexPool || ammPool || yieldOpp)) {

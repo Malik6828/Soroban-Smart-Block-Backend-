@@ -2525,8 +2525,8 @@ privacyRouter.get(
         category: info.category,
         strength: info.strength,
         verificationStatus: 'verified',
-        firstDetected: null,
-        knownContracts: [],
+        firstDetected: null as Date | null,
+        knownContracts: [] as string[],
       }));
 
       res.json({ protocols: registry, total: registry.length });

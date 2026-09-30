@@ -492,6 +492,7 @@ export async function createAlert(
       severity,
       message,
       metadata: metadata as object,
+      createdAt: new Date(),
     },
   });
 }

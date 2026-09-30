@@ -80,7 +80,7 @@ abiExtractRouter.get(
           humanTemplate: f.doc,
         })),
       };
-      await setCachedAbi(address, abiForCache).catch(() => null);
+      await setCachedAbi(address, abiForCache).catch((): null => null);
     }
 
     return res.json({
@@ -196,9 +196,11 @@ abiExtractRouter.post(
     const functions = existing?.functions ?? [];
 
     const idx = functions.findIndex((f) => f.name === functionName);
+    // Zod widens the parsed `params` to optional properties while
+    // strictNullChecks is off; restore the AbiFunction input contract.
     const updated = {
       name: functionName,
-      inputs: params,
+      inputs: params as { name: string; type: string }[],
       outputs: [{ type: returns }],
     };
 

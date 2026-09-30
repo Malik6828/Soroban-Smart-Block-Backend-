@@ -13,16 +13,46 @@ interface LogEntry {
   [key: string]: unknown;
 }
 
-function log(level: LogLevel, message: string, meta?: Record<string, unknown>): void {
+/**
+ * Anything that can be attached to a log line as structured context.
+ * Call sites legitimately pass plain objects, but also strings, numbers,
+ * Errors and typed interfaces (which lack an index signature) — accepting
+ * `unknown` avoids forcing every caller to wrap its value.
+ */
+type LogMeta = unknown;
+
+/**
+ * Normalise the context argument into a plain object that can be spread into
+ * the JSON log entry. Primitive values are nested under `detail`; `Error`
+ * instances keep their message and stack.
+ */
+function toMeta(meta: LogMeta): Record<string, unknown> {
+  if (meta === undefined || meta === null) return {};
+  if (meta instanceof Error) {
+    return { error: meta.message, ...(meta.stack ? { stack: meta.stack } : {}) };
+  }
+  if (typeof meta === 'object' && !Array.isArray(meta)) {
+    return meta as Record<string, unknown>;
+  }
+  return { detail: meta };
+}
+
+function log(level: LogLevel, message: string | Record<string, unknown>, meta?: LogMeta): void {
+  const messageText =
+    typeof message === 'string' ? message : String(message.message ?? safeJson(message));
+
+  const metaObj =
+    typeof message === 'string' ? toMeta(meta) : toMeta({ ...message, ...toMeta(meta) });
+
   const ctx = traceStorage.getStore();
   const entry: LogEntry = {
     level,
-    message,
+    message: messageText,
     timestamp: new Date().toISOString(),
     ...(ctx?.requestId ? { requestId: ctx.requestId } : {}),
     ...(ctx?.traceId ? { traceId: ctx.traceId } : {}),
     ...(ctx?.spanId ? { spanId: ctx.spanId } : {}),
-    ...meta,
+    ...metaObj,
   };
 
   const line = IS_PROD ? JSON.stringify(entry) : prettyPrint(entry);
@@ -31,20 +61,56 @@ function log(level: LogLevel, message: string, meta?: Record<string, unknown>): 
   else process.stdout.write(line + '\n');
 }
 
+function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function prettyPrint(e: Record<string, unknown>): string {
   const { level, timestamp, message, ...rest } = e;
-  const extras = Object.keys(rest).length ? ' ' + JSON.stringify(rest) : '';
+  const extras = Object.keys(rest).length ? ' ' + safeJson(rest) : '';
   return `[${String(timestamp).slice(11, 23)}] ${String(level).toUpperCase().padEnd(5)} ${message}${extras}`;
+}
+
+// ---------------------------------------------------------------------------
+// Component logger — `new Logger('ComponentName')` for modules that want a
+// stable component label on every line without threading it through each call.
+// ---------------------------------------------------------------------------
+export class Logger {
+  private readonly component: string;
+
+  constructor(component: string) {
+    this.component = component;
+  }
+
+  debug(msg: string | Record<string, unknown>, meta?: LogMeta): void {
+    log('debug', msg, { component: this.component, ...toMeta(meta) });
+  }
+
+  info(msg: string | Record<string, unknown>, meta?: LogMeta): void {
+    log('info', msg, { component: this.component, ...toMeta(meta) });
+  }
+
+  warn(msg: string | Record<string, unknown>, meta?: LogMeta): void {
+    log('warn', msg, { component: this.component, ...toMeta(meta) });
+  }
+
+  error(msg: string | Record<string, unknown>, meta?: LogMeta): void {
+    log('error', msg, { component: this.component, ...toMeta(meta) });
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Exported logger
 // ---------------------------------------------------------------------------
 export const logger = {
-  debug: (msg: string, meta?: Record<string, unknown>) => log('debug', msg, meta),
-  info: (msg: string, meta?: Record<string, unknown>) => log('info', msg, meta),
-  warn: (msg: string, meta?: Record<string, unknown>) => log('warn', msg, meta),
-  error: (msg: string, meta?: Record<string, unknown>) => log('error', msg, meta),
+  debug: (msg: string | Record<string, unknown>, meta?: LogMeta) => log('debug', msg, meta),
+  info: (msg: string | Record<string, unknown>, meta?: LogMeta) => log('info', msg, meta),
+  warn: (msg: string | Record<string, unknown>, meta?: LogMeta) => log('warn', msg, meta),
+  error: (msg: string | Record<string, unknown>, meta?: LogMeta) => log('error', msg, meta),
 };
 
 // ---------------------------------------------------------------------------

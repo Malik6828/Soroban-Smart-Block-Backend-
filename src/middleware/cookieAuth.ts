@@ -285,11 +285,12 @@ export function sessionCookieAuth(): (req: Request, res: Response, next: NextFun
           error: err.message,
           ip: req.ip,
         });
-        return res.status(400).json({
+        res.status(400).json({
           error: 'Invalid Session',
           message: err.message,
           code: 'SESSION_INVALID',
         });
+        return;
       }
       // Unexpected error — propagate to error handler
       return next(err);

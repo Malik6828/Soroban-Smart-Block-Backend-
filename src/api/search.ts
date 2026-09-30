@@ -122,12 +122,14 @@ searchRouter.get(
       const searchIndexEntries = await prismaRead.searchIndexEntry.findMany({
         where: {
           AND: [
-            cleanQuery ? { content: { contains: cleanQuery, mode: 'insensitive' } } : undefined,
+            cleanQuery
+              ? { content: { contains: cleanQuery, mode: 'insensitive' as const } }
+              : undefined,
             functionMatch
               ? {
                   AND: [
                     { contentType: 'function' },
-                    { content: { contains: functionMatch, mode: 'insensitive' } },
+                    { content: { contains: functionMatch, mode: 'insensitive' as const } },
                   ],
                 }
               : undefined,
@@ -135,7 +137,7 @@ searchRouter.get(
               ? {
                   AND: [
                     { contentType: 'import' },
-                    { content: { contains: importMatch, mode: 'insensitive' } },
+                    { content: { contains: importMatch, mode: 'insensitive' as const } },
                   ],
                 }
               : undefined,
@@ -143,7 +145,7 @@ searchRouter.get(
               ? {
                   AND: [
                     { contentType: 'event' },
-                    { content: { contains: eventMatch, mode: 'insensitive' } },
+                    { content: { contains: eventMatch, mode: 'insensitive' as const } },
                   ],
                 }
               : undefined,
@@ -151,7 +153,7 @@ searchRouter.get(
               ? {
                   AND: [
                     { contentType: 'storage' },
-                    { content: { contains: storageMatch, mode: 'insensitive' } },
+                    { content: { contains: storageMatch, mode: 'insensitive' as const } },
                   ],
                 }
               : undefined,
@@ -159,7 +161,7 @@ searchRouter.get(
               ? {
                   AND: [
                     { contentType: 'error' },
-                    { content: { contains: errorMatch, mode: 'insensitive' } },
+                    { content: { contains: errorMatch, mode: 'insensitive' as const } },
                   ],
                 }
               : undefined,
@@ -409,8 +411,8 @@ async function loadContracts(q: string): Promise<SuggestCandidate[]> {
     where: {
       isToken: false,
       OR: [
-        { address: { startsWith: q, mode: 'insensitive' } },
-        { name: { contains: q, mode: 'insensitive' } },
+        { address: { startsWith: q, mode: 'insensitive' as const } },
+        { name: { contains: q, mode: 'insensitive' as const } },
       ],
     },
     take: SUGGEST_PER_TYPE_CAP,
@@ -438,9 +440,9 @@ async function loadTokens(q: string): Promise<SuggestCandidate[]> {
     where: {
       isToken: true,
       OR: [
-        { tokenSymbol: { startsWith: q, mode: 'insensitive' } },
-        { tokenName: { startsWith: q, mode: 'insensitive' } },
-        { address: { startsWith: q, mode: 'insensitive' } },
+        { tokenSymbol: { startsWith: q, mode: 'insensitive' as const } },
+        { tokenName: { startsWith: q, mode: 'insensitive' as const } },
+        { address: { startsWith: q, mode: 'insensitive' as const } },
       ],
     },
     take: SUGGEST_PER_TYPE_CAP,
@@ -466,7 +468,7 @@ async function loadTokens(q: string): Promise<SuggestCandidate[]> {
 async function loadWallets(q: string): Promise<SuggestCandidate[]> {
   // Wallets are not a table of their own — distinct source accounts stand in.
   const rows = await prismaRead.transaction.findMany({
-    where: { sourceAccount: { startsWith: q, mode: 'insensitive' } },
+    where: { sourceAccount: { startsWith: q, mode: 'insensitive' as const } },
     distinct: ['sourceAccount'],
     take: SUGGEST_PER_TYPE_CAP,
     orderBy: [{ sourceAccount: 'asc' }],
@@ -482,7 +484,7 @@ async function loadWallets(q: string): Promise<SuggestCandidate[]> {
 
 async function loadTransactions(q: string): Promise<SuggestCandidate[]> {
   const rows = await prismaRead.transaction.findMany({
-    where: { hash: { startsWith: q, mode: 'insensitive' } },
+    where: { hash: { startsWith: q, mode: 'insensitive' as const } },
     take: SUGGEST_PER_TYPE_CAP,
     orderBy: { ledgerSequence: 'desc' },
     select: { hash: true, functionName: true, humanReadable: true, status: true },
@@ -507,8 +509,8 @@ async function loadEvents(q: string): Promise<SuggestCandidate[]> {
   const rows = await prismaRead.event.findMany({
     where: {
       OR: [
-        { eventType: { contains: q, mode: 'insensitive' } },
-        { contractAddress: { startsWith: q, mode: 'insensitive' } },
+        { eventType: { contains: q, mode: 'insensitive' as const } },
+        { contractAddress: { startsWith: q, mode: 'insensitive' as const } },
       ],
     },
     take: SUGGEST_PER_TYPE_CAP,

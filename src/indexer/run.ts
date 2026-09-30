@@ -28,7 +28,7 @@ async function shutdown(signal: string) {
   logger.info(`[indexer] received ${signal}, shutting down...`);
   stopIndexerService();
   await stopP2pNode().catch((err) => logger.error('[indexer] error stopping p2p node:', err));
-  await prisma.$disconnect().catch(() => undefined);
+  await prisma.$disconnect().catch((): undefined => undefined);
   process.exit(0);
 }
 

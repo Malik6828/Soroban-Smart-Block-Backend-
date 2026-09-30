@@ -14,20 +14,7 @@ import { Request, Response, NextFunction } from 'express';
 import { logger } from '../logger';
 import { checkQuota } from '../services/billing-metering';
 
-// Augment Express Request to include the apiKey field populated by upstream auth middleware.
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace Express {
-    interface Request {
-      apiKey?: {
-        id: string;
-        developerId: string;
-        tier?: string;
-        [key: string]: unknown;
-      };
-    }
-  }
-}
+// `req.apiKey` is declared once, as `ApiKeyContext`, in src/types/express.d.ts.
 
 /**
  * Express middleware that enforces per-developer quota limits.

@@ -9,6 +9,7 @@
  * loads pools, runs it, and reconciles the persisted opportunity set.
  */
 
+import { Prisma } from '@prisma/client';
 import { prismaWrite, prismaRead } from '../../db';
 
 export interface ArbPool {
@@ -118,6 +119,7 @@ export function findArbitrageOpportunities(
 export async function scanArbitrage(opts: ArbOptions = {}): Promise<ArbitrageOpportunity[]> {
   const pools = await prismaRead.dexPool.findMany({
     select: {
+      id: true,
       poolAddress: true,
       tokenA: true,
       tokenB: true,
@@ -130,13 +132,17 @@ export async function scanArbitrage(opts: ArbOptions = {}): Promise<ArbitrageOpp
     },
   });
 
+  // The persisted opportunity stores the owning DexPool rows by id, while the
+  // detector works in pool addresses.
+  const poolIdByAddress = new Map(pools.map((p) => [p.poolAddress, p.id]));
+
   const arbPools: ArbPool[] = pools.map((p) => ({
     poolAddress: p.poolAddress,
     pairKey: pairKeyOf(p.tokenA, p.tokenB),
     tokenA: p.tokenA,
     tokenB: p.tokenB,
-    reserveAHuman: Number(BigInt(p.reserveA)) / 10 ** p.tokenADecimals,
-    reserveBHuman: Number(BigInt(p.reserveB)) / 10 ** p.tokenBDecimals,
+    reserveAHuman: Number(BigInt(p.reserveA.toString())) / 10 ** p.tokenADecimals,
+    reserveBHuman: Number(BigInt(p.reserveB.toString())) / 10 ** p.tokenBDecimals,
     feeBps: p.feeBps,
     quotePriceUsd: p.priceBUsd,
   }));
@@ -167,17 +173,23 @@ export async function scanArbitrage(opts: ArbOptions = {}): Promise<ArbitrageOpp
       select: { id: true },
     });
     const data = {
+      pair: `${o.tokenA.slice(0, 6)}/${o.tokenB.slice(0, 6)}`,
+      pairKey: o.pairKey,
       tokenA: o.tokenA,
       tokenB: o.tokenB,
-      pairKey: o.pairKey,
-      buyPool: o.buyPool,
-      sellPool: o.sellPool,
-      buyPriceUsd: o.buyRate,
-      sellPriceUsd: o.sellRate,
-      spreadPct: o.spreadPct,
+      type: 'direct',
+      buyPoolId: poolIdByAddress.get(o.buyPool) ?? null,
+      sellPoolId: poolIdByAddress.get(o.sellPool) ?? null,
+      buyPrice: o.buyRate,
+      sellPrice: o.sellRate,
+      profitPercentage: o.spreadPct,
       estProfitUsd: o.estProfitUsd,
-      optimalTradeUsd: o.optimalTradeUsd,
+      route: [
+        { action: 'buy', poolId: o.buyPool, expectedOutput: o.optimalTradeUsd },
+        { action: 'sell', poolId: o.sellPool, expectedOutput: o.optimalTradeUsd },
+      ] as unknown as Prisma.InputJsonValue,
       status: 'open',
+      detectedAt: new Date(),
     };
     if (existing) {
       await prismaWrite.arbitrageOpportunity.update({ where: { id: existing.id }, data });

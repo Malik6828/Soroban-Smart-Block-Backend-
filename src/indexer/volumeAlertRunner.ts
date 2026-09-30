@@ -30,6 +30,7 @@ export async function runVolumeAlerts(
       zScore: a.zScore,
       windowMinutes: a.windowMinutes,
       detectedAt: a.detectedAt,
+      acknowledged: false,
     })),
   });
 

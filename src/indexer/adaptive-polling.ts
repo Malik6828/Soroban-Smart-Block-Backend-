@@ -1,5 +1,5 @@
 import { Logger } from '../logger';
-import { db } from '../db';
+import { rawQuery } from '../db/raw';
 
 /**
  * Adaptive Polling Service
@@ -270,7 +270,7 @@ export class AdaptivePollingService {
   /** Persist polling state to database for recovery */
   private async persistPollingState(state: any): Promise<void> {
     try {
-      await db.query(
+      await rawQuery(
         `
         INSERT INTO adaptive_polling_state 
           (polling_interval_ms, batch_size, ema_interval_ms, last_updated)
@@ -291,7 +291,7 @@ export class AdaptivePollingService {
   /** Recover polling state from database */
   async recoverState(): Promise<void> {
     try {
-      const result = await db.query(
+      const result = await rawQuery(
         'SELECT * FROM adaptive_polling_state ORDER BY id DESC LIMIT 1',
       );
 

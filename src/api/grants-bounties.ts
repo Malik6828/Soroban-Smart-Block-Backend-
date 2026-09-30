@@ -11,12 +11,13 @@ grantsBountiesRouter.get(
     const [proposalsCount, payoutsCount, totalPaid] = await Promise.all([
       prisma.governanceProposal.count(),
       prisma.treasuryPayoutStream.count(),
-      prisma.treasuryTransaction.aggregate({ _sum: { amount: true } }),
+      // `amount` is an integer string in base units — sum the numeric column.
+      prisma.treasuryTransaction.aggregate({ _sum: { amountNumeric: true } }),
     ]);
     res.json({
       proposals: proposalsCount,
       payoutStreams: payoutsCount,
-      totalPaid: totalPaid._sum.amount ?? 0,
+      totalPaid: totalPaid._sum.amountNumeric ?? 0,
     });
   }),
 );
@@ -58,11 +59,16 @@ grantsBountiesRouter.get(
     const limit = Math.min(Number(req.query.limit) || 10, 50);
     const rows = await prisma.treasuryTransaction.groupBy({
       by: ['recipient'],
-      _sum: { amount: true },
-      orderBy: { _sum: { amount: 'desc' } },
+      _sum: { amountNumeric: true },
+      orderBy: { _sum: { amountNumeric: 'desc' } },
       take: limit,
     });
-    res.json(rows.map((r) => ({ recipient: r.recipient, total: r._sum.amount ?? 0 })));
+    res.json(
+      rows.map((r: { recipient: string | null; _sum: { amountNumeric: number | null } }) => ({
+        recipient: r.recipient,
+        total: r._sum.amountNumeric ?? 0,
+      })),
+    );
   }),
 );
 

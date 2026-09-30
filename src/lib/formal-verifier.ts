@@ -27,6 +27,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { prismaRead, prismaWrite } from '../db';
 import { logger } from '../logger';
+import type { FormalVerificationData } from './audit-pdf-report';
 
 const execAsync = promisify(exec);
 
@@ -405,7 +406,7 @@ async function runSmtChecker(input: FormalVerifInput): Promise<ToolResult> {
 
     // Look for overflow/panic evidence
     const overflows = (output.match(/attempt to .+? overflow/g) ?? []).length;
-    const panics = (output.match(/panicked/g) ?? []).length;
+    const _panics = (output.match(/panicked/g) ?? []).length;
 
     const counterExamples: CounterExample[] = [];
     if (overflows > 0) {
@@ -614,7 +615,8 @@ export async function runFormalVerification(
         violatedCount: result.violatedCount,
         unknownCount: result.unknownCount,
         coveragePercent: result.coveragePercent,
-        counterExamples: result.counterExamples as import('@prisma/client').Prisma.InputJsonValue,
+        counterExamples:
+          result.counterExamples as unknown as import('@prisma/client').Prisma.InputJsonValue,
         toolOutput: result.toolOutput,
         reportUrl: result.reportUrl,
         toolVersion: result.toolVersion,
@@ -671,7 +673,7 @@ export async function runFormalVerification(
  */
 export async function getFormalVerificationResults(
   contractAddress: string,
-): Promise<Array<Record<string, unknown>>> {
+): Promise<FormalVerificationData[]> {
   const jobs = await prismaRead.formalVerificationJob.findMany({
     where: { contractAddress },
     orderBy: { createdAt: 'desc' },
@@ -688,7 +690,8 @@ export async function getFormalVerificationResults(
     violatedCount: j.violatedCount,
     unknownCount: j.unknownCount,
     coveragePercent: j.coveragePercent,
-    counterExamples: j.counterExamples,
+    counterExamples: (j.counterExamples ??
+      []) as unknown as FormalVerificationData['counterExamples'],
     reportUrl: j.reportUrl,
     toolVersion: j.toolVersion,
     durationSeconds: j.durationSeconds,

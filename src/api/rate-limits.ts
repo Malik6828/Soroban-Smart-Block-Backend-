@@ -192,7 +192,14 @@ rateLimitAdminRouter.post(
     }
 
     const { orgId, ...tierFields } = parsed.data;
-    const config: EnterpriseTierConfig = tierFields;
+    const config: EnterpriseTierConfig = {
+      maxPerMinute: tierFields.maxPerMinute,
+      maxBurst: tierFields.maxBurst,
+      windowMs: tierFields.windowMs,
+      label: tierFields.label,
+      featureFlags: tierFields.featureFlags,
+      graceDegradation: tierFields.graceDegradation,
+    };
     const row = tierConfigToRow(orgId, config);
 
     try {

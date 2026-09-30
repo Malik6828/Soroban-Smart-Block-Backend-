@@ -34,7 +34,8 @@ const SEVERITY_PENALTY: Record<Severity, number> = {
 };
 const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info'];
 
-const PRIVILEGED = /^(set_admin|upgrade|mint|burn_from|pause|unpause|set_owner|transfer_ownership|withdraw|set_fee|set_oracle|clawback|freeze|update_wasm)/i;
+const PRIVILEGED =
+  /^(set_admin|upgrade|mint|burn_from|pause|unpause|set_owner|transfer_ownership|withdraw|set_fee|set_oracle|clawback|freeze|update_wasm)/i;
 const EXTERNAL_CALL = /(invoke|call|cross_call|callback|flash|hook)/i;
 const ARITH = /^(add|sub|mul|div|mint|deposit|withdraw|swap|scale|multiply)/i;
 
@@ -101,7 +102,10 @@ export function generateAuditReport(
       });
     }
   }
-  if (fns.some((f) => PRIVILEGED.test(f.name)) && ![...topics].some((t) => /admin|upgrade|owner/i.test(t))) {
+  if (
+    fns.some((f) => PRIVILEGED.test(f.name)) &&
+    ![...topics].some((t) => /admin|upgrade|owner/i.test(t))
+  ) {
     findings.push({
       id: 'no-admin-events',
       title: 'Privileged actions are not observable',
@@ -134,7 +138,13 @@ export function generateAuditReport(
   const score = Math.max(0, 100 - penalty);
   const grade = score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 50 ? 'D' : 'F';
   const riskLevel =
-    summary.critical > 0 ? 'critical' : summary.high > 0 ? 'high' : summary.medium > 0 ? 'medium' : 'low';
+    summary.critical > 0
+      ? 'critical'
+      : summary.high > 0
+        ? 'high'
+        : summary.medium > 0
+          ? 'medium'
+          : 'low';
 
   return {
     contractAddress,
@@ -189,9 +199,9 @@ auditReportRouter.get(
       distinct: ['topicSymbol'],
       take: 500,
     });
-    const topics = events.map((e: { topicSymbol: string | null }) => e.topicSymbol).filter(
-      (t: string | null): t is string => !!t,
-    );
+    const topics = events
+      .map((e: { topicSymbol: string | null }) => e.topicSymbol)
+      .filter((t: string | null): t is string => !!t);
     const report = generateAuditReport(address, contract.abi, topics);
     if (format === 'markdown') {
       res.type('text/markdown').send(renderMarkdown(report));

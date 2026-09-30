@@ -23,14 +23,14 @@ import {
 export const dexAnalyticsRouter = Router();
 
 function reservesHuman(pool: {
-  reserveA: string;
-  reserveB: string;
+  reserveA: string | { toString(): string };
+  reserveB: string | { toString(): string };
   tokenADecimals: number;
   tokenBDecimals: number;
 }) {
   return {
-    a: toHuman(BigInt(pool.reserveA), pool.tokenADecimals),
-    b: toHuman(BigInt(pool.reserveB), pool.tokenBDecimals),
+    a: toHuman(BigInt(pool.reserveA.toString()), pool.tokenADecimals),
+    b: toHuman(BigInt(pool.reserveB.toString()), pool.tokenBDecimals),
   };
 }
 

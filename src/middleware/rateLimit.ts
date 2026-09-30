@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import rateLimit, { RateLimitRequestHandler, Store } from 'express-rate-limit';
+import rateLimit, { Store } from 'express-rate-limit';
 import { NextFunction, Request, Response } from 'express';
 import { config } from '../config';
 import { prismaRead } from '../db';
@@ -83,7 +83,9 @@ const DEFAULT_TIERS: Record<TierName, TierConfig> = {
 type TierName = 'free' | 'developer' | 'premium' | 'enterprise';
 type TierConfig = { windowMs: number; max: number };
 type BucketState = { count: number; resetAt: number };
-type Limiters = Record<TierName, RateLimitRequestHandler>;
+// The limiter wrappers below are plain Express middleware; the extra
+// `resetKey`/`getKey` members on express-rate-limit's handler type are not used.
+type Limiters = Record<TierName, (req: Request, res: Response, next: NextFunction) => void>;
 
 const overrideCache = new Map<string, { config: TierConfig; expiresAt: number }>();
 const requestBuckets = new Map<string, BucketState>();
@@ -432,7 +434,7 @@ export async function tieredRateLimit(
   const legacyTier: TierName =
     tier === 'enterprise'
       ? 'enterprise'
-      : tier === 'pro' || tier === 'premium'
+      : tier === 'pro'
         ? 'premium'
         : tier === 'developer'
           ? 'developer'
