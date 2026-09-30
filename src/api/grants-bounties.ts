@@ -11,12 +11,13 @@ grantsBountiesRouter.get(
     const [proposalsCount, payoutsCount, totalPaid] = await Promise.all([
       prisma.governanceProposal.count(),
       prisma.treasuryPayoutStream.count(),
-      prisma.treasuryTransaction.aggregate({ _sum: { amount: true } }),
+      // `amount` is an integer string in base units — sum the numeric column.
+      prisma.treasuryTransaction.aggregate({ _sum: { amountNumeric: true } }),
     ]);
     res.json({
       proposals: proposalsCount,
       payoutStreams: payoutsCount,
-      totalPaid: totalPaid._sum.amount ?? 0,
+      totalPaid: totalPaid._sum.amountNumeric ?? 0,
     });
   }),
 );

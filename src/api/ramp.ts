@@ -224,7 +224,9 @@ rampRouter.post(
 
     // ── KYC gate ───────────────────────────────────────────────────────────────
     const kycCheck = await checkKycAllowance(userId, fiatAmount, country);
-    if (!kycCheck.allowed) {
+    // Compare the literal discriminant explicitly: with strictNullChecks off,
+    // truthiness narrowing does not narrow literal-typed union members.
+    if (kycCheck.allowed === false) {
       return res.status(400).json({ error: kycCheck.reason, code: 'KYC_REQUIRED' });
     }
 

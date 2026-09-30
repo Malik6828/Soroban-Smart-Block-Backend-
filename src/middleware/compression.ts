@@ -134,8 +134,12 @@ export function compressionMiddleware(userConfig?: CompressionConfig) {
 
       if (chunk && selectedEncoding !== 'identity') {
         const contentType = res.get('Content-Type') || '';
-        const buffer =
-          typeof chunk === 'string' ? Buffer.from(chunk, actualEncoding as BufferEncoding) : chunk;
+        const buffer: Buffer =
+          typeof chunk === 'string'
+            ? Buffer.from(chunk, actualEncoding as BufferEncoding)
+            : Buffer.isBuffer(chunk)
+              ? chunk
+              : Buffer.from(chunk as Uint8Array);
         const size = buffer.length;
 
         if (size >= config.threshold && config.filter(contentType)) {

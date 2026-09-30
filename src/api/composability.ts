@@ -380,7 +380,7 @@ composabilityRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const tx = await prismaRead.composedTransaction.findUnique({
       where: { txHash: req.params.txHash },
-      include: { patterns: { include: { pattern: true } } },
+      include: { patternInstances: { include: { pattern: true } } },
     });
     if (!tx) return res.status(404).json({ error: 'Not found' });
     res.json(tx);
@@ -1138,7 +1138,7 @@ composabilityRouter.get(
   asyncHandler(async (req: Request, res: Response) => {
     const tx = await prismaRead.composedTransaction.findUnique({
       where: { txHash: req.params.txHash },
-      include: { patterns: { include: { pattern: true } } },
+      include: { patternInstances: { include: { pattern: true } } },
     });
     if (!tx) return res.status(404).json({ error: 'Not found' });
 
@@ -1155,7 +1155,7 @@ composabilityRouter.get(
       riskLevel: tx.riskLevel,
       callGraph: tx.callGraph,
       contractCalls: tx.contractCalls,
-      patterns: tx.patterns.map((pi) => ({
+      patterns: tx.patternInstances.map((pi) => ({
         name: pi.pattern.name,
         category: pi.pattern.category,
         confidence: pi.confidence,
@@ -1173,7 +1173,7 @@ composabilityRouter.get(
             verified: verification.verified,
           }
         : null,
-      recommendations: tx.patterns.map((pi) => pi.pattern.mitigationGuide).filter(Boolean),
+      recommendations: tx.patternInstances.map((pi) => pi.pattern.mitigationGuide).filter(Boolean),
       generatedAt: new Date().toISOString(),
     };
 
@@ -1353,7 +1353,7 @@ composabilityRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const tx = await prismaRead.composedTransaction.findUnique({
       where: { txHash: req.params.txHash },
-      include: { patterns: { include: { pattern: true } } },
+      include: { patternInstances: { include: { pattern: true } } },
     });
     if (!tx) return res.status(404).json({ error: 'Not found' });
     const calls = (tx.contractCalls as unknown as ContractCall[]) ?? [];

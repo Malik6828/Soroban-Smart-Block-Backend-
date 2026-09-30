@@ -138,7 +138,8 @@ async function scoreSecurityDimension(contractAddress: string): Promise<{
       severity: sev,
       title: adv.title,
       description: `Threat advisory: ${adv.title}`,
-      recommendation: (adv.mitigations ?? []).join('; ') || undefined,
+      // `mitigations` is a single delimited string column, not a string[].
+      recommendation: adv.mitigations || undefined,
       cvssScore: adv.cvssScore ?? undefined,
       cweId: adv.cveId ?? undefined,
     });

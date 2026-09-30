@@ -71,7 +71,7 @@ marketRouter.get(
     const stablecoins = tokenMarketData.filter((d) => d.isStablecoin);
     const depegged = stablecoins.filter((s) => (s.pegDeviation24h ?? 0) > 0.02);
     const stablecoinMcap = stablecoins.reduce((s, sc) => {
-      const tp = tokenPrices.find((p) => p.tokenAddress === sc.tokenAddress);
+      const tp = tokenPrices.find((p) => p.tokenAddress === sc.address);
       return s + Number(tp?.marketCapUsd ?? 0);
     }, 0);
 
@@ -417,10 +417,10 @@ marketRouter.get(
 
     res.json({
       stablecoins: stablecoins.map((s) => {
-        const price = priceMap.get(s.tokenAddress);
+        const price = priceMap.get(s.address);
         const stableInfo = getStablecoinInfo(s.symbol);
         return {
-          address: s.tokenAddress,
+          address: s.address,
           symbol: s.symbol,
           peg: s.stablecoinPeg ?? stableInfo?.peg ?? 'USD',
           targetPrice: stableInfo?.targetPrice ?? 1,

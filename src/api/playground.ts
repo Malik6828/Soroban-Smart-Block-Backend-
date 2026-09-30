@@ -171,8 +171,13 @@ playgroundRouter.get(
           ...(fn ? { functionName: fn } : {}),
           functionArgs: { not: undefined },
         },
-        select: { functionName: true, functionArgs: true, ledger: true, hash: true },
-        orderBy: { ledger: 'desc' },
+        select: {
+          functionName: true,
+          functionArgs: true,
+          ledgerSequence: true,
+          hash: true,
+        },
+        orderBy: { ledgerSequence: 'desc' },
         take: 20,
       });
 
@@ -181,7 +186,7 @@ playgroundRouter.get(
         examples: txs.map((t) => ({
           functionName: t.functionName,
           args: t.functionArgs,
-          ledger: t.ledger,
+          ledger: t.ledgerSequence,
           txHash: t.hash,
         })),
       });

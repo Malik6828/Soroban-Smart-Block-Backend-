@@ -23,6 +23,7 @@
 
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prismaRead, prismaWrite } from '../db';
 import { cacheGet, cacheSet, buildCacheKey } from '../cache';
 import { logger } from '../logger';
@@ -71,12 +72,33 @@ function resolveStatus(cert: { status: string; expiresAt: Date | null }): string
   return cert.status;
 }
 
+// Full certificate row (no select → all scalars).
+type FullCert = Prisma.AuditCertificateGetPayload<Record<string, never>>;
+
+/** Fields of a live finding consumed by {@link formatFull}. */
+type FindingRow = Pick<
+  Prisma.AuditFindingGetPayload<Record<string, never>>,
+  | 'id'
+  | 'category'
+  | 'severity'
+  | 'title'
+  | 'description'
+  | 'detail'
+  | 'recommendation'
+  | 'status'
+  | 'cweId'
+  | 'cvssScore'
+  | 'txHash'
+  | 'resolvedAt'
+  | 'createdAt'
+>;
+
 /**
  * Shape a certificate + its live findings into the canonical API response
  * matching the spec exactly.
  */
-function formatFull(cert: Record<string, unknown>, findings: Array<Record<string, unknown>>) {
-  const score = cert.overallScore as number;
+function formatFull(cert: FullCert, findings: FindingRow[]) {
+  const score = cert.overallScore;
   return {
     certificateId: cert.id,
     contractAddress: cert.contractAddress,
@@ -130,8 +152,8 @@ function formatFull(cert: Record<string, unknown>, findings: Array<Record<string
 }
 
 /** Lightweight row used in history / delta endpoints. */
-function formatSummary(cert: Record<string, unknown>) {
-  const score = cert.overallScore as number;
+function formatSummary(cert: FullCert) {
+  const score = cert.overallScore;
   return {
     certificateId: cert.id,
     version: cert.version,
@@ -221,10 +243,7 @@ contractAuditRouter.get(
         },
       });
 
-      const result = formatFull(
-        cert as unknown as Record<string, unknown>,
-        findings as unknown as Array<Record<string, unknown>>,
-      );
+      const result = formatFull(cert, findings);
 
       await cacheSet(cacheKey, result, 120); // 2-minute cache
       res.json(result);
@@ -299,7 +318,7 @@ contractAuditRouter.get(
         page: q.page,
         limit: q.limit,
         pages: Math.ceil(total / q.limit),
-        history: certs.map((c) => formatSummary(c as unknown as Record<string, unknown>)),
+        history: certs.map((c) => formatSummary(c)),
       });
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors });
@@ -596,12 +615,7 @@ contractAuditRouter.get(
         },
       });
 
-      res.json(
-        formatFull(
-          cert as unknown as Record<string, unknown>,
-          findings as unknown as Array<Record<string, unknown>>,
-        ),
-      );
+      res.json(formatFull(cert, findings));
     } catch (e) {
       res.status(500).json({ error: String(e) });
     }

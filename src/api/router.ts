@@ -36,7 +36,7 @@ import { aaRouter } from './aa';
 import { complianceRouter } from './compliance';
 import { nlqRouter } from './nlq';
 import { dataMarketRouter } from './data-market';
-import { dataMarketUsageRouter, trackDataMarketUsage } from './data-market-usage';
+import { trackDataMarketUsage } from './data-market-usage';
 
 // ── Search API (#662 - Orphaned routes) ────────────────────────────────────────
 import { searchRouter } from './search';
@@ -375,3 +375,44 @@ router.use('/reputation-badges', reputationBadgesRouter);
 // ── Analytics template SQL export (ECO07 / #1018) ────────────────────────────
 import { sqlExportRouter } from './sql-export';
 router.use('/analytics/sql-export', requireApiKey, sqlExportRouter);
+
+// ── Fiat on/off-ramp gateway (JWT-protected; webhooks HMAC-verified) ─────────
+import { rampRouter } from './ramp';
+router.use('/ramp', rampRouter);
+
+// ── Cross-chain identity graph ──────────────────────────────────────────────
+import { identityRouter } from './identity';
+router.use('/identity', identityRouter);
+
+// ── Gas analytics ───────────────────────────────────────────────────────────
+import { gasRouter } from './gas';
+router.use('/gas', gasRouter);
+
+// ── Prediction marketplace / forecasts ──────────────────────────────────────
+import { predictRouter } from './predict';
+router.use('/predict', predictRouter);
+
+// ── Dependency/impact propagation analysis ──────────────────────────────────
+import { propagationRouter } from './propagation';
+router.use('/propagation', propagationRouter);
+
+// ── Public data lakehouse exports ───────────────────────────────────────────
+import { publicDatasetsRouter } from './public-datasets';
+router.use('/datasets', publicDatasetsRouter);
+
+// ── Community SQL query-template gallery (keyed to the developer API) ───────
+import { queryTemplateGalleryRouter } from './query-template-gallery';
+router.use('/query-templates', requireApiKey, queryTemplateGalleryRouter);
+
+// ── Event schema registry ───────────────────────────────────────────────────
+import { eventSchemaRegistryRouter } from './event-schema-registry';
+router.use('/event-schemas', eventSchemaRegistryRouter);
+
+// ── SDK version registry (also serves the generated OpenAPI spec) ───────────
+import { sdksRouter, openApiSpecRouter } from './sdks';
+router.use('/sdks', sdksRouter);
+router.use('/openapi.json', openApiSpecRouter);
+
+// ── Token holder distribution analytics ─────────────────────────────────────
+import { tokenHoldersRouter } from './token-holders';
+router.use('/token-holders', tokenHoldersRouter);

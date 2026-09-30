@@ -38,6 +38,34 @@ function prettyPrint(e: Record<string, unknown>): string {
 }
 
 // ---------------------------------------------------------------------------
+// Component logger — `new Logger('ComponentName')` for modules that want a
+// stable component label on every line without threading it through each call.
+// ---------------------------------------------------------------------------
+export class Logger {
+  private readonly component: string;
+
+  constructor(component: string) {
+    this.component = component;
+  }
+
+  debug(msg: string, meta?: Record<string, unknown>): void {
+    log('debug', msg, { component: this.component, ...meta });
+  }
+
+  info(msg: string, meta?: Record<string, unknown>): void {
+    log('info', msg, { component: this.component, ...meta });
+  }
+
+  warn(msg: string, meta?: Record<string, unknown>): void {
+    log('warn', msg, { component: this.component, ...meta });
+  }
+
+  error(msg: string, meta?: Record<string, unknown>): void {
+    log('error', msg, { component: this.component, ...meta });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Exported logger
 // ---------------------------------------------------------------------------
 export const logger = {
