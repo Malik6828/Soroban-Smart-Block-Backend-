@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { versioningMiddleware, normalizeVersion, resolveVersion } from '../src/middleware/versioning';
+import {
+  versioningMiddleware,
+  normalizeVersion,
+  resolveVersion,
+} from '../src/middleware/versioning';
 
 function run(header?: string) {
   const req: any = { headers: header ? { 'accept-version': header } : {}, requestId: 'r1' };

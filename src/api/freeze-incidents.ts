@@ -4,10 +4,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { adminAuth } from '../middleware/adminAuth';
-import {
-  freezeIncidentChannel,
-  FreezeIncident,
-} from '../indexer/freeze-incident-channel';
+import { freezeIncidentChannel, FreezeIncident } from '../indexer/freeze-incident-channel';
 
 export const freezeIncidentsRouter = Router();
 freezeIncidentsRouter.use(adminAuth);
@@ -16,7 +13,10 @@ const severity = z.enum(['low', 'medium', 'high', 'critical']);
 
 freezeIncidentsRouter.get('/', (req: Request, res: Response) => {
   const q = z
-    .object({ minSeverity: severity.default('low'), limit: z.coerce.number().int().min(1).max(200).default(50) })
+    .object({
+      minSeverity: severity.default('low'),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+    })
     .safeParse(req.query);
   if (!q.success) return res.status(400).json({ error: q.error.flatten() });
   const incidents = freezeIncidentChannel.listRecent(q.data.minSeverity, q.data.limit);
@@ -50,7 +50,13 @@ freezeIncidentsRouter.get('/subscriptions', (_req: Request, res: Response) => {
 
 freezeIncidentsRouter.post('/subscriptions', (req: Request, res: Response) => {
   const body = z
-    .object({ url: z.string().url().refine((u) => u.startsWith('https://'), 'https required'), minSeverity: severity.default('high') })
+    .object({
+      url: z
+        .string()
+        .url()
+        .refine((u) => u.startsWith('https://'), 'https required'),
+      minSeverity: severity.default('high'),
+    })
     .safeParse(req.body);
   if (!body.success) return res.status(400).json({ error: body.error.flatten() });
   res.status(201).json(freezeIncidentChannel.addWebhook(body.data.url, body.data.minSeverity));

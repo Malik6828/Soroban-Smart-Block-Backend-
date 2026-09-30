@@ -1,9 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-  sumDecimalAmounts,
-} from '../../src/indexer/precision';
+import { sumDecimalAmounts } from '../../src/indexer/precision';
 
 describe('Stop losing precision on token amounts in indexer aggregators (#1114)', () => {
   it('correctly aggregates amounts > 2^53 with 7 decimals without precision loss', () => {

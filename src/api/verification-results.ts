@@ -47,7 +47,9 @@ export function resetVerificationStore(): void {
 
 export function parseIngestPayload(
   body: any,
-): { ok: true; value: Omit<VerificationResult, 'id' | 'ingestedAt'> } | { ok: false; error: string } {
+):
+  | { ok: true; value: Omit<VerificationResult, 'id' | 'ingestedAt'> }
+  | { ok: false; error: string } {
   if (!body || typeof body !== 'object') return { ok: false, error: 'Body must be an object' };
   if (typeof body.contractAddress !== 'string' || !ADDRESS_RE.test(body.contractAddress)) {
     return { ok: false, error: 'Invalid contractAddress' };
@@ -111,7 +113,13 @@ export function buildDisplay(address: string): VerificationDisplay {
     total,
     provenRatio: total ? proven / total : 0,
     coverage: latest?.coverage ?? 0,
-    status: !latest ? 'unverified' : violated ? 'failed' : proven === total && total > 0 ? 'verified' : 'partial',
+    status: !latest
+      ? 'unverified'
+      : violated
+        ? 'failed'
+        : proven === total && total > 0
+          ? 'verified'
+          : 'partial',
     latest,
   };
 }
@@ -132,7 +140,8 @@ verificationResultsRouter.get(
   '/:address',
   asyncHandler(async (req: Request, res: Response) => {
     const address = String(req.params.address);
-    if (!ADDRESS_RE.test(address)) return res.status(400).json({ error: 'Invalid contract address' });
+    if (!ADDRESS_RE.test(address))
+      return res.status(400).json({ error: 'Invalid contract address' });
     res.json(buildDisplay(address));
   }),
 );
@@ -142,7 +151,8 @@ verificationResultsRouter.get(
   '/:address/history',
   asyncHandler(async (req: Request, res: Response) => {
     const address = String(req.params.address);
-    if (!ADDRESS_RE.test(address)) return res.status(400).json({ error: 'Invalid contract address' });
+    if (!ADDRESS_RE.test(address))
+      return res.status(400).json({ error: 'Invalid contract address' });
     res.json({ contractAddress: address, results: store.get(address) ?? [] });
   }),
 );

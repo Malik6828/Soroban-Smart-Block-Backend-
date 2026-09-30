@@ -29,8 +29,19 @@ scheduledScansRouter.get('/results/:address', (req: Request, res: Response) => {
 });
 
 scheduledScansRouter.get('/changes', (req: Request, res: Response) => {
-  const since = z.coerce.number().int().min(0).default(0).parse(req.query.since ?? 0);
-  const limit = z.coerce.number().int().min(1).max(500).default(100).parse(req.query.limit ?? 100);
+  const since = z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .parse(req.query.since ?? 0);
+  const limit = z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .default(100)
+    .parse(req.query.limit ?? 100);
   const changes = riskStore.changesSince(since, limit);
   res.json({ changes, nextSince: changes.length ? changes[changes.length - 1].seq : since });
 });

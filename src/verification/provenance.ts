@@ -70,7 +70,13 @@ export async function verifyProvenance(address: string): Promise<VerificationRes
   const checkedAt = new Date().toISOString();
   const latest = getHistory(address)[0];
   if (!latest) {
-    return { contractAddress: address, status: 'no_provenance', attestedArtifactHash: null, onChainWasmHash: null, checkedAt };
+    return {
+      contractAddress: address,
+      status: 'no_provenance',
+      attestedArtifactHash: null,
+      onChainWasmHash: null,
+      checkedAt,
+    };
   }
   const contract = await prismaRead.contract.findUnique({
     where: { address },
@@ -78,7 +84,13 @@ export async function verifyProvenance(address: string): Promise<VerificationRes
   });
   const onChain = contract?.wasmHash?.toLowerCase() ?? null;
   if (!onChain) {
-    return { contractAddress: address, status: 'no_onchain_hash', attestedArtifactHash: latest.artifactHash, onChainWasmHash: null, checkedAt };
+    return {
+      contractAddress: address,
+      status: 'no_onchain_hash',
+      attestedArtifactHash: latest.artifactHash,
+      onChainWasmHash: null,
+      checkedAt,
+    };
   }
   return {
     contractAddress: address,
