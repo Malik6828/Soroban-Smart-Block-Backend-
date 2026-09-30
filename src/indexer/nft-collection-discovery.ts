@@ -103,7 +103,7 @@ async function registerCollection(contractAddress: string): Promise<void> {
   logger.info({ contractAddress }, '[nft-discovery] Registering new NFT collection');
 
   // Fetch on-chain metadata (name, symbol, totalSupply) if available
-  const chainMeta = await fetchCollectionMetadataFromChain(contractAddress).catch(() => null);
+  const chainMeta = await fetchCollectionMetadataFromChain(contractAddress).catch((): null => null);
 
   await prismaWrite.nftCollection.create({
     data: {

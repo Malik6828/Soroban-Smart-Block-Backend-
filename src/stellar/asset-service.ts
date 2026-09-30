@@ -190,7 +190,11 @@ export async function getAssetDetail(code: string, issuer: string) {
 export async function getAssetHolders(code: string, issuer: string, limit = 20) {
   // Horizon doesn't expose holder list directly; use trustline count as proxy
   const asset = await fetchHorizonAsset(code, issuer);
-  if (!asset) return { holders: [], concentration: { gini: 0, top10Share: 0 } };
+  if (!asset)
+    return {
+      holders: [] as Array<Record<string, unknown>>,
+      concentration: { gini: 0, top10Share: 0 },
+    };
 
   return {
     holders: [],

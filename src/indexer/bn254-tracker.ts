@@ -475,7 +475,14 @@ export async function getBn254AggregateStats(limit: number = 1000) {
       totalStroopSavings: '0',
       avgSavingsPct: 0,
       totalOps: 0,
-      recentTransactions: [],
+      recentTransactions: [] as Array<{
+        hash: string;
+        savingsPct: number | null;
+        stroopSavings: string | null;
+        opCount: number;
+        ledger: number;
+        timestamp: Date;
+      }>,
     };
   }
 

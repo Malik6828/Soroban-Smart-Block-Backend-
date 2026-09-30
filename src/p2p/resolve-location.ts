@@ -98,7 +98,7 @@ export async function resolveLedgerLocation(
     const owners = ownersOf(ledgerSeq).filter((p) => p !== selfPeerId);
     for (const ownerPeerId of owners) {
       const response = await queryForwarder(ownerPeerId, ledgerSeq, includeEvents).catch(
-        () => null,
+        (): null => null,
       );
       if (response?.found) {
         if (cached && cached.indexHash !== response.indexHash) {

@@ -191,7 +191,7 @@ export async function processAaTransaction(
             allocatedBlocks: 17280,
           },
         })
-        .catch(() => undefined);
+        .catch((): undefined => undefined);
     }
   }
 
@@ -319,7 +319,9 @@ export async function processAaTransaction(
 
   // 10. Passkey / secp256r1 signature inspection (non-blocking)
   if (classification.authMethods.includes('passkey') || classification.walletType === 'passkey') {
-    void inspectSignature(transactionHash, ledgerSequence, rawXdr).catch(() => undefined);
+    void inspectSignature(transactionHash, ledgerSequence, rawXdr).catch(
+      (): undefined => undefined,
+    );
   }
 
   // 11. Custom account (__check_auth) deep inspection (non-blocking)
@@ -328,7 +330,9 @@ export async function processAaTransaction(
     classification.walletType === 'custom' ||
     classification.walletType === 'hybrid'
   ) {
-    void inspectCustomAccount(transactionHash, ledgerSequence, rawXdr).catch(() => undefined);
+    void inspectCustomAccount(transactionHash, ledgerSequence, rawXdr).catch(
+      (): undefined => undefined,
+    );
   }
 
   // 12. Signer snapshot for threshold trend analysis
@@ -345,7 +349,7 @@ export async function processAaTransaction(
           ledgerSequence,
         },
       })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
   }
 
   // 13. Broadcast new smart wallet discovery over WebSocket

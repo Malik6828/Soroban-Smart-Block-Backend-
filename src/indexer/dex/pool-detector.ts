@@ -220,8 +220,8 @@ async function ensurePool(
 
   const [tokenA, tokenB] = canonicalPair(pair[0], pair[1]);
   const [metaA, metaB] = await Promise.all([
-    getTokenMetadata(tokenA).catch(() => null),
-    getTokenMetadata(tokenB).catch(() => null),
+    getTokenMetadata(tokenA).catch((): null => null),
+    getTokenMetadata(tokenB).catch((): null => null),
   ]);
 
   await prisma.dexPool.create({

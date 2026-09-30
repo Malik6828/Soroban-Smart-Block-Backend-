@@ -80,7 +80,7 @@ abiExtractRouter.get(
           humanTemplate: f.doc,
         })),
       };
-      await setCachedAbi(address, abiForCache).catch(() => null);
+      await setCachedAbi(address, abiForCache).catch((): null => null);
     }
 
     return res.json({

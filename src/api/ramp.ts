@@ -622,7 +622,7 @@ rampRouter.post(
 
     if (update) {
       const order =
-        (await getOrder(update.platformOrderId).catch(() => null)) ??
+        (await getOrder(update.platformOrderId).catch((): null => null)) ??
         (await (async () => {
           if (update.providerOrderId) {
             const { getOrderByProviderRef } = await import('../services/ramp/order-management');

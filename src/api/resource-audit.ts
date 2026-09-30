@@ -318,11 +318,17 @@ resourceAuditRouter.get(
       return res.json({
         metric,
         limit,
-        contracts: rows.map((r) => ({
-          contractAddress: r.contractAddress,
-          totalFeesLumens: parseFloat((Number(r._sum.feeCharged ?? 0) / 1e7).toFixed(7)),
-          totalInvocations: r._count.id,
-        })),
+        contracts: rows.map(
+          (r: {
+            contractAddress: string | null;
+            _sum: { feeCharged: number | null };
+            _count: { id: number };
+          }) => ({
+            contractAddress: r.contractAddress,
+            totalFeesLumens: parseFloat((Number(r._sum.feeCharged ?? 0) / 1e7).toFixed(7)),
+            totalInvocations: r._count.id,
+          }),
+        ),
       });
     }
 
@@ -345,11 +351,17 @@ resourceAuditRouter.get(
     res.json({
       metric,
       limit,
-      contracts: rows.map((r) => ({
-        contractAddress: r.contractAddress,
-        total: Number((r._sum as any)[prismaField] ?? 0),
-        totalInvocations: r._count.id,
-      })),
+      contracts: rows.map(
+        (r: {
+          contractAddress: string | null;
+          _sum: Record<string, unknown>;
+          _count: { id: number };
+        }) => ({
+          contractAddress: r.contractAddress,
+          total: Number((r._sum as Record<string, unknown>)[prismaField] ?? 0),
+          totalInvocations: r._count.id,
+        }),
+      ),
     });
   }),
 );

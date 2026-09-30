@@ -476,14 +476,14 @@ export function createLeaderboard(
   limit = 10,
 ): LeaderboardEntry[] {
   const grouped = groupByAddress(chainData);
-  const entries = Array.from(grouped.entries()).map(([address, items]) => {
+  const entries: LeaderboardEntry[] = Array.from(grouped.entries()).map(([address, items]) => {
     const result = buildScoreResult(address, items, []);
     return {
       address,
       score: result.score,
       activeChains: result.activeChains.length,
       linkedAddresses: result.linkedAddresses,
-      badges: [],
+      badges: [] as string[],
       sybilRisk: result.sybil.risk,
     };
   });

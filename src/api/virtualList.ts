@@ -179,7 +179,7 @@ virtualListRouter.get(
         return {
           height: Math.max(ESTIMATED_ROW_HEIGHT, Math.ceil(height)),
           components,
-          contentWidth: undefined,
+          contentWidth: undefined as number | undefined,
         };
       })(),
     }));
@@ -294,7 +294,7 @@ virtualListRouter.get(
         return {
           height: Math.max(ESTIMATED_ROW_HEIGHT, Math.ceil(height)),
           components,
-          contentWidth: undefined,
+          contentWidth: undefined as number | undefined,
         };
       })(),
     }));
