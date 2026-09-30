@@ -307,6 +307,52 @@ model ContractNetwork {
   @@map("_contract_networks")
 }
 
+/// Community-submitted ABI and metadata awaiting moderation and publication.
+model ContractAbiSubmission {
+  id            String    @map("id") @id @default(cuid())
+  address       String    @map("address") @db.VarChar(56)
+  network       String    @map("network") @db.VarChar(32)
+  submittedBy   String    @map("submitted_by") @db.VarChar(128)
+  payload       Json      @map("payload")
+  contentHash   String    @map("content_hash") @db.VarChar(64)
+  status        String    @map("status") @default("pending")
+  validatedAt   DateTime  @map("validated_at")
+  validationLedger Int    @map("validation_ledger")
+  reviewNote    String?   @map("review_note")
+  reviewedBy    String?   @map("reviewed_by")
+  reviewedAt    DateTime? @map("reviewed_at")
+  publishedAt   DateTime? @map("published_at")
+  createdAt     DateTime  @map("created_at") @default(now())
+  updatedAt     DateTime  @map("updated_at") @updatedAt
+
+  events ContractAbiSubmissionEvent[]
+
+  @@unique(
+    [address, network, submittedBy, contentHash],
+    name: "address_network_submitter_content",
+    map: "_contract_abi_submissions_address_network_submitter_content_key"
+  )
+  @@index([status, createdAt])
+  @@index([address, network])
+  @@map("_contract_abi_submissions")
+}
+
+/// Append-only record of each moderation state transition.
+model ContractAbiSubmissionEvent {
+  id           String   @map("id") @id @default(cuid())
+  submissionId String   @map("submission_id")
+  fromStatus   String?  @map("from_status")
+  toStatus     String   @map("to_status")
+  actor        String   @map("actor")
+  reason       String?  @map("reason")
+  createdAt    DateTime @map("created_at") @default(now())
+
+  submission ContractAbiSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId, createdAt])
+  @@map("_contract_abi_submission_events")
+}
+
 model VerificationRun {
   id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address")
@@ -1034,6 +1080,46 @@ model AlertConfiguration {
   @@map("_alert_configurations")
 }
 
+model GasFeeAlertRule {
+  id                      String    @map("id") @id @default(cuid())
+  developerId             String    @map("developer_id") @db.VarChar(128)
+  network                 String    @db.VarChar(16)
+  direction               String    @db.VarChar(8)
+  thresholdStroops        String    @map("threshold_stroops") @db.VarChar(78)
+  cooldownSeconds         Int       @map("cooldown_seconds") @default(900)
+  isActive                Boolean   @map("is_active") @default(true)
+  lastObservedFeeStroops   String?   @map("last_observed_fee_stroops") @db.VarChar(78)
+  lastEvaluatedAt         DateTime? @map("last_evaluated_at")
+  lastTriggeredAt         DateTime? @map("last_triggered_at")
+  createdAt               DateTime  @map("created_at") @default(now())
+  updatedAt               DateTime  @map("updated_at") @updatedAt
+
+  @@index([developerId, network, isActive])
+  @@index([network, isActive])
+  @@map("_gas_fee_alert_rules")
+}
+
+model GasFeeAlertEvent {
+  id                     String    @map("id") @id @default(cuid())
+  eventKey               String    @unique @map("event_key") @db.VarChar(256)
+  ruleId                 String    @map("rule_id") @db.VarChar(128)
+  developerId            String    @map("developer_id") @db.VarChar(128)
+  network                String    @db.VarChar(16)
+  direction              String    @db.VarChar(8)
+  thresholdStroops       String    @map("threshold_stroops") @db.VarChar(78)
+  previousFeeStroops     String    @map("previous_fee_stroops") @db.VarChar(78)
+  currentFeeStroops      String    @map("current_fee_stroops") @db.VarChar(78)
+  trend                  String    @db.VarChar(8)
+  bucketStart            DateTime  @map("bucket_start")
+  bucketEnd              DateTime  @map("bucket_end")
+  dispatchedAt           DateTime? @map("dispatched_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([ruleId, bucketStart])
+  @@map("_gas_fee_alert_events")
+}
+
 model IncidentReport {
   id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address") @db.VarChar(56)
@@ -1668,11 +1754,14 @@ model DevApiKey {
   status String @map("status") @default("active")
   /// ID of the key that was rotated to produce this key, for audit-trail chaining (#888)
   rotatedFromKeyId String? @map("rotated_from_key_id")
+  tenantId String? @map("tenant_id")
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
 
-  developer    Developer     @relation(fields: [developerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  developer    Developer       @relation(fields: [developerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  tenant       Tenant?         @relation(fields: [tenantId], references: [id])
   usageRecords UsageRecord[]
+  apiKeyScopes ApiKeyScope[]
 
   @@index([developerId])
   @@index([keyPrefix])
@@ -1680,6 +1769,7 @@ model DevApiKey {
   @@index([status])
   @@index([tier])
   @@index([expiresAt])
+  @@index([tenantId])
   @@map("_dev_api_keies")
 }
 
@@ -2695,6 +2785,7 @@ model GasAnalyticsSnapshot {
   medianFee Float? @map("median_fee")
   peakFee Float? @map("peak_fee")
   minFee Float? @map("min_fee")
+  feeSumStroops String @map("fee_sum_stroops") @db.VarChar(78) @default("0")
   txCount Int @map("tx_count")
   createdAt DateTime @map("created_at") @default(now())
 
@@ -3868,6 +3959,8 @@ model WebhookDelivery {
   id String @map("id") @id @default(cuid())
   subscriptionId String @map("subscription_id")
   eventId String? @map("event_id")
+  batchPayload Json? @map("batch_payload")
+  idempotencyKey String? @unique(map: "_webhook_deliveries_idempotency_key_key") @map("idempotency_key")
   attempt Int? @map("attempt")
   status String? @map("status")
   processingStatus String @map("processing_status") @default("idle") // "idle" | "processing" | "done"
@@ -3875,12 +3968,14 @@ model WebhookDelivery {
   httpStatus Int? @map("http_status")
   responseBody String? @map("response_body")
   errorMsg String? @map("error_msg")
+  errorCode String? @map("error_code")
   deliveredAt DateTime? @map("delivered_at")
   nextRetryAt DateTime? @map("next_retry_at")
   expiresAt DateTime? @map("expires_at")
   createdAt DateTime @map("created_at") @default(now())
 
   subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  outboxEvents WebhookOutboxEvent[]
 
   @@index([subscriptionId])
   @@index([expiresAt])
@@ -3899,6 +3994,9 @@ model WebhookSubscription {
   active Boolean @map("active") @default(true)
   storeResponseBody Boolean @map("store_response_body") @default(true)
   responseRetentionDays Int @map("response_retention_days") @default(90)
+  deliveryStrategy String @map("delivery_strategy") @default("immediate")
+  batchSize Int @map("batch_size") @default(100)
+  batchWindowMs Int @map("batch_window_ms") @default(50)
 
   // Challenge/response verification state. `verificationToken` is the
   // SHA-256 digest of the in-flight challenge (never the plaintext) so a
@@ -3912,9 +4010,35 @@ model WebhookSubscription {
   updatedAt DateTime @map("updated_at") @updatedAt
 
   delivery WebhookDelivery[]
+  outboxEvents WebhookOutboxEvent[]
 
   @@index([apiKeyId])
   @@map("_webhook_subscriptions")
+}
+
+model WebhookOutboxEvent {
+  id String @map("id") @id
+  subscriptionId String @map("subscription_id")
+  eventId String @map("event_id")
+  eventPayload Json @map("event_payload")
+  entityKey String @map("entity_key")
+  ledgerSequence Int @map("ledger_sequence")
+  transactionHash String @map("transaction_hash")
+  status String @default("pending")
+  batchDeliveryId String? @map("batch_delivery_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @map("created_at") @default(now())
+  updatedAt DateTime @map("updated_at") @updatedAt
+
+  subscription WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  batchDelivery WebhookDelivery? @relation(fields: [batchDeliveryId], references: [id], onDelete: SetNull)
+
+  @@unique([subscriptionId, eventId])
+  @@index([subscriptionId, status, createdAt])
+  @@index([subscriptionId, entityKey, status, ledgerSequence, transactionHash, eventId], map: "_webhook_outbox_order_idx")
+  @@index([batchDeliveryId])
+  @@index([expiresAt])
+  @@map("_webhook_outbox_events")
 }
 
 model YieldDistribution {
@@ -4883,14 +5007,19 @@ model WalletUser {
   isMultiSig  Boolean   @default(false)
   metadata    Json      @default("{}")
   lastLogin   DateTime?
+  tenantId    String?   @map("tenant_id")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  sessions AuthSession[]
-  events   AuthEvent[]
-  webhooks AuthWebhook[]
+  sessions        AuthSession[]
+  events          AuthEvent[]
+  webhooks        AuthWebhook[]
+  tenant          Tenant?           @relation(fields: [tenantId], references: [id])
+  userRoles       UserRole[]
+  userPermissions UserPermission[]
 
   @@index([address])
+  @@index([tenantId])
   @@map("wallet_users")
 }
 
@@ -5444,1063 +5573,181 @@ model UsageQuota {
   @@map("_usage_quotas")
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Phantom-delegate remediation (#1098): the models below back every
-// `prisma.<delegate>` reference that existed in src/ without a schema model.
-// Each model's columns are derived from the actual call sites (data/where/
-// select/include shapes) so the generated client matches real usage.
-// ═════════════════════════════════════════════════════════════════════════════
-
-// ─── Agent economy: templates, agents, executions, verification ───────────────
-
-model AgentTemplate {
-  id                 String   @map("id") @id @default(cuid())
-  name               String   @map("name")
-  description        String   @map("description")
-  category           String   @map("category")
-  version            String   @map("version")
-  author             String   @map("author")
-  price              String   @map("price") @default("0")
-  configSchema       Json     @map("config_schema") @default("{}")
-  wasmBase64         String?  @map("wasm_base64")
-  abi                Json?    @map("abi")
-  defaultPermissions Json     @map("default_permissions") @default("[]")
-  defaultLimits      Json     @map("default_limits") @default("{}")
-  isPublished        Boolean  @map("is_published") @default(false)
-  downloadCount      Int      @map("download_count") @default(0)
-  createdAt          DateTime @map("created_at") @default(now())
-  updatedAt          DateTime @map("updated_at") @updatedAt
-
-  agents Agent[]
-
-  @@index([category])
-  @@index([isPublished, downloadCount])
-  @@map("_agent_templates")
-}
-
-model Agent {
-  id                  String   @map("id") @id @default(cuid())
-  name                String   @map("name")
-  description         String?  @map("description")
-  ownerAddress        String   @map("owner_address")
-  templateId          String   @map("template_id")
-  // lifecycle: deployed → validating → active → running → paused → terminated → archived
-  status              String   @map("status") @default("deployed")
-  permissions         Json     @map("permissions") @default("[]")
-  resourceLimits      Json     @map("resource_limits") @default("{}")
-  config              Json     @map("config") @default("{}")
-  maxDrawdown         Float?   @map("max_drawdown")
-  currentDrawdown     Float    @map("current_drawdown") @default(0)
-  totalExecutions     Int      @map("total_executions") @default(0)
-  successfulExecutions Int     @map("successful_executions") @default(0)
-  failureCount        Int      @map("failure_count") @default(0)
-  totalGasUsed        Int      @map("total_gas_used") @default(0)
-  currentDayGasUsed   Int      @map("current_day_gas_used") @default(0)
-  gasResetAt          DateTime @map("gas_reset_at") @default(now())
-  lastExecutionAt     DateTime? @map("last_execution_at")
-  lastAlertAt         DateTime? @map("last_alert_at")
-  metadata            Json     @map("metadata") @default("{}")
-  createdAt           DateTime @map("created_at") @default(now())
-  updatedAt           DateTime @map("updated_at") @updatedAt
-
-  template      AgentTemplate    @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  executions    AgentExecution[]
-  alerts        AgentAlert[]
-  escalations   AgentEscalation[]
-  registration  AgentRegistration?
-  messagesSent  AgentMessage[]   @relation("agentMessageFrom")
-  messagesRecv  AgentMessage[]   @relation("agentMessageTo")
-  ratingsSent   AgentRating[]    @relation("agentRatingFrom")
-  ratingsRecv   AgentRating[]    @relation("agentRatingTo")
-
-  @@index([ownerAddress])
-  @@index([templateId])
-  @@index([status])
-  @@index([ownerAddress, status])
-  @@map("_agents")
-}
-
-model AgentExecution {
-  id               String    @map("id") @id @default(cuid())
-  agentId          String    @map("agent_id")
-  // 'success' | 'failed' | 'timeout'
-  status           String    @map("status")
-  // 'scheduled' | 'manual' | 'event'
-  trigger          String    @map("trigger") @default("scheduled")
-  inputState       Json?     @map("input_state")
-  decision         Json?     @map("decision")
-  outputAction     Json?     @map("output_action")
-  reasoning        Json      @map("reasoning") @default("[]")
-  gasUsed          Int       @map("gas_used") @default(0)
-  trace            Json?     @map("trace")
-  traceHash        String?   @map("trace_hash")
-  signature        String?   @map("signature")
-  error            String?   @map("error")
-  completedAt      DateTime? @map("completed_at")
-  isVerified       Boolean   @map("is_verified") @default(false)
-  verifiedBy       Int       @map("verified_by") @default(0)
-  verifiedCount    Int       @map("verified_count") @default(0)
-  flaggedCount     Int       @map("flagged_count") @default(0)
-  createdAt        DateTime  @map("created_at") @default(now())
-
-  agent         Agent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  verifications AgentVerification[]
-  ratings       AgentRating[]
-
-  @@index([agentId, createdAt])
-  @@index([status])
-  @@index([traceHash])
-  @@map("_agent_executions")
-}
-
-model AgentVerification {
-  id           String   @map("id") @id @default(cuid())
-  executionId  String   @map("execution_id")
-  verifierNode String   @map("verifier_node")
-  // 'verified' | 'flagged' | 'pending'
-  status       String   @map("status")
-  discrepancy  Json?    @map("discrepancy")
-  signature    String?  @map("signature")
-  verifiedAt   DateTime @map("verified_at") @default(now())
-  createdAt    DateTime @map("created_at") @default(now())
-
-  execution AgentExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
-
-  @@index([executionId])
-  @@index([verifierNode])
-  @@map("_agent_verifications")
-}
-
-model AgentAlert {
-  id             String    @map("id") @id @default(cuid())
-  agentId        String    @map("agent_id")
-  // 'inactivity' | 'high_failure_rate' | 'budget_exceeded' | 'circuit_break' | 'verification_failure'
-  type           String    @map("type")
-  // 'info' | 'warning' | 'critical'
-  severity       String    @map("severity") @default("info")
-  message        String    @map("message")
-  data           Json      @map("data") @default("{}")
-  acknowledged   Boolean   @map("acknowledged") @default(false)
-  acknowledgedAt DateTime? @map("acknowledged_at")
-  createdAt      DateTime  @map("created_at") @default(now())
-
-  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
-
-  @@index([agentId, acknowledged, createdAt])
-  @@index([type])
-  @@map("_agent_alerts")
-}
-
-model AgentEscalation {
-  id              String    @map("id") @id @default(cuid())
-  agentId         String    @map("agent_id")
-  context         Json      @map("context") @default("{}")
-  proposedActions Json      @map("proposed_actions") @default("[]")
-  // 'open' | 'resolved' | 'rejected'
-  status          String    @map("status") @default("open")
-  resolution      Json?     @map("resolution")
-  resolvedBy      String?   @map("resolved_by")
-  resolvedAt      DateTime? @map("resolved_at")
-  createdAt       DateTime  @map("created_at") @default(now())
-
-  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
-
-  @@index([agentId, status])
-  @@index([status, createdAt])
-  @@map("_agent_escalations")
-}
-
-model AgentMessage {
-  id           String    @map("id") @id
-  fromAgentId  String    @map("from_agent_id")
-  toAgentId    String    @map("to_agent_id")
-  // 'request' | 'response' | 'negotiate' | 'broadcast' | 'alert'
-  type         String    @map("type")
-  subject      String    @map("subject")
-  body         Json      @map("body") @default("{}")
-  signature    String?   @map("signature")
-  responseToId String?   @map("response_to_id")
-  // 'pending' | 'delivered' | 'acknowledged' | 'rejected'
-  status       String    @map("status") @default("pending")
-  respondedAt  DateTime? @map("responded_at")
-  createdAt    DateTime  @map("created_at") @default(now())
-
-  fromAgent  Agent         @relation("agentMessageFrom", fields: [fromAgentId], references: [id], onDelete: Cascade)
-  toAgent    Agent         @relation("agentMessageTo", fields: [toAgentId], references: [id], onDelete: Cascade)
-  responseTo AgentMessage? @relation("agentMessageThread", fields: [responseToId], references: [id], onDelete: SetNull)
-  replies    AgentMessage[] @relation("agentMessageThread")
-
-  @@index([fromAgentId, toAgentId])
-  @@index([toAgentId, status])
-  @@index([type])
-  @@map("_agent_messages")
-}
-
-model AgentRating {
-  id          String   @map("id") @id @default(cuid())
-  fromAgentId String   @map("from_agent_id")
-  toAgentId   String   @map("to_agent_id")
-  executionId String?  @map("execution_id")
-  score       Int      @map("score")
-  review      String?  @map("review")
-  createdAt   DateTime @map("created_at") @default(now())
-
-  fromAgent Agent          @relation("agentRatingFrom", fields: [fromAgentId], references: [id], onDelete: Cascade)
-  toAgent   Agent          @relation("agentRatingTo", fields: [toAgentId], references: [id], onDelete: Cascade)
-  execution AgentExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
-
-  @@index([toAgentId, createdAt])
-  @@index([fromAgentId])
-  @@map("_agent_ratings")
-}
-
-model AgentRegistration {
-  id            String   @map("id") @id @default(cuid())
-  agentId       String   @map("agent_id") @unique
-  capabilities  Json     @map("capabilities") @default("[]")
-  pricePerCall  String?  @map("price_per_call")
-  pricePerMonth String?  @map("price_per_month")
-  rating        Float    @map("rating") @default(0)
-  totalRatings  Int      @map("total_ratings") @default(0)
-  totalJobsDone Int      @map("total_jobs_done") @default(0)
-  isActive      Boolean  @map("is_active") @default(true)
-  metadata      Json     @map("metadata") @default("{}")
-  createdAt     DateTime @map("created_at") @default(now())
-  updatedAt     DateTime @map("updated_at") @updatedAt
-
-  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
-
-  @@index([isActive])
-  @@map("_agent_registrations")
-}
-
-// ─── Custom dashboards ────────────────────────────────────────────────────────
-
-model Dashboard {
-  id          String   @map("id") @id @default(cuid())
-  name        String   @map("name")
-  description String?  @map("description")
-  ownerId     String   @map("owner_id")
-  isPublic    Boolean  @map("is_public") @default(false)
-  layout      Json     @map("layout") @default("[]")
-  theme       Json     @map("theme") @default("{}")
-  tags        String[] @map("tags") @default([])
-  embedToken  String?  @map("embed_token") @unique
-  createdAt   DateTime @map("created_at") @default(now())
-  updatedAt   DateTime @map("updated_at") @updatedAt
-
-  widgets       DashboardWidget[]
-  collaborators DashboardCollaborator[]
-  snapshots     DashboardSnapshot[]
-
-  @@index([ownerId, updatedAt])
-  @@index([isPublic])
-  @@map("_dashboards")
-}
-
-model DashboardWidget {
-  id          String   @map("id") @id @default(cuid())
-  dashboardId String   @map("dashboard_id")
-  // 'chart' | 'table' | 'metric' | 'map' | 'heatmap' | 'feed' | 'text'
-  type        String   @map("type")
-  title       String?  @map("title")
-  config      Json     @map("config") @default("{}")
-  position    Json     @map("position") @default("{\"x\":0,\"y\":0,\"w\":4,\"h\":3}")
-  refreshMs   Int      @map("refresh_ms") @default(30000)
-  createdAt   DateTime @map("created_at") @default(now())
-
-  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
-
-  @@index([dashboardId])
-  @@map("_dashboard_widgets")
-}
-
-model DashboardCollaborator {
-  id          String   @map("id") @id @default(cuid())
-  dashboardId String   @map("dashboard_id")
-  userId      String   @map("user_id")
-  // 'viewer' | 'editor' | 'admin'
-  role        String   @map("role") @default("viewer")
-  createdAt   DateTime @map("created_at") @default(now())
-
-  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
-
-  @@unique([dashboardId, userId])
-  @@index([userId])
-  @@map("_dashboard_collaborators")
-}
-
-model DashboardSnapshot {
-  id          String   @map("id") @id @default(cuid())
-  dashboardId String   @map("dashboard_id")
-  label       String?  @map("label")
-  data        Json     @map("data") @default("{}")
-  createdAt   DateTime @map("created_at") @default(now())
-
-  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
-
-  @@index([dashboardId, createdAt])
-  @@map("_dashboard_snapshots")
-}
-
-// ─── Cross-chain identity graph ───────────────────────────────────────────────
-
-model IdentityGraph {
-  id          String   @map("id") @id @default(cuid())
-  ownerId     String?  @map("owner_id")
-  displayName String?  @map("display_name")
-  avatarUrl   String?  @map("avatar_url")
-  metadata    Json     @map("metadata") @default("{}")
-  createdAt   DateTime @map("created_at") @default(now())
-  updatedAt   DateTime @map("updated_at") @updatedAt
-
-  addresses ChainAddress[]
-  linksOut  IdentityLink[] @relation("identityLinkSource")
-  linksIn   IdentityLink[] @relation("identityLinkTarget")
-
-  @@index([ownerId])
-  @@map("_identity_graphs")
-}
-
-model ChainAddress {
-  id        String   @map("id") @id @default(cuid())
-  identityId String  @map("identity_id")
-  chain     String   @map("chain")
-  address   String   @map("address")
-  label     String?  @map("label")
-  verifyProof String? @map("verify_proof")
-  metadata  Json     @map("metadata") @default("{}")
-  createdAt DateTime @map("created_at") @default(now())
-
-  identity IdentityGraph @relation(fields: [identityId], references: [id], onDelete: Cascade)
-  bridgesFrom BridgeTransfer[] @relation("bridgeTransferFrom")
-  bridgesTo   BridgeTransfer[] @relation("bridgeTransferTo")
-
-  @@unique([chain, address])
-  @@index([identityId])
-  @@map("_chain_addresses")
-}
-
-model IdentityLink {
-  id               String   @map("id") @id @default(cuid())
-  sourceIdentityId String   @map("source_identity_id")
-  targetIdentityId String   @map("target_identity_id")
-  // 'same-user' | 'bridge' | 'contract-deployer' | 'associated'
-  linkType         String   @map("link_type") @default("same-user")
-  confidence       Float    @map("confidence") @default(1.0)
-  evidence         Json     @map("evidence") @default("[]")
-  createdAt        DateTime @map("created_at") @default(now())
-
-  sourceIdentity IdentityGraph @relation("identityLinkSource", fields: [sourceIdentityId], references: [id], onDelete: Cascade)
-  targetIdentity IdentityGraph @relation("identityLinkTarget", fields: [targetIdentityId], references: [id], onDelete: Cascade)
-
-  @@unique([sourceIdentityId, targetIdentityId])
-  @@index([targetIdentityId])
-  @@map("_identity_links")
-}
-
-model BridgeTransfer {
-  id             String   @map("id") @id @default(cuid())
-  fromChain      String   @map("from_chain")
-  toChain        String   @map("to_chain")
-  fromAddress    String   @map("from_address")
-  toAddress      String   @map("to_address")
-  asset          String   @map("asset")
-  amount         String   @map("amount")
-  bridgeProtocol String?  @map("bridge_protocol")
-  txHashSource   String?  @map("tx_hash_source")
-  txHashDest     String?  @map("tx_hash_dest")
-  // 'pending' | 'completed' | 'failed'
-  status         String   @map("status") @default("pending")
-  timestamp      DateTime @map("timestamp")
-  metadata       Json     @map("metadata") @default("{}")
-  fromAddressId  String?  @map("from_address_id")
-  toAddressId    String?  @map("to_address_id")
-  createdAt      DateTime @map("created_at") @default(now())
-
-  fromAddressRef ChainAddress? @relation("bridgeTransferFrom", fields: [fromAddressId], references: [id], onDelete: SetNull)
-  toAddressRef   ChainAddress? @relation("bridgeTransferTo", fields: [toAddressId], references: [id], onDelete: SetNull)
-
-  @@index([timestamp])
-  @@index([fromAddress, toAddress])
-  @@index([status])
-  @@index([bridgeProtocol, timestamp])
-  @@index([fromAddressId])
-  @@index([toAddressId])
-  @@map("_bridge_transfers")
-}
-
-// ─── Gas analytics ────────────────────────────────────────────────────────────
-
-model GasAnalytics {
-  id                 String   @map("id") @id @default(cuid())
-  txHash             String   @map("tx_hash") @unique
-  contractAddress    String   @map("contract_address")
-  functionName       String   @map("function_name")
-  cpuInstructions    Int      @map("cpu_instructions") @default(0)
-  memoryBytes        Int      @map("memory_bytes") @default(0)
-  ledgerReadBytes    Int      @map("ledger_read_bytes") @default(0)
-  ledgerWriteBytes   Int      @map("ledger_write_bytes") @default(0)
-  ledgerEntryCount   Int      @map("ledger_entry_count") @default(0)
-  contractEventsBytes Int     @map("contract_events_bytes") @default(0)
-  returnValueBytes   Int      @map("return_value_bytes") @default(0)
-  hostFunctionCalls  Int      @map("host_function_calls") @default(0)
-  contractCalls      Int      @map("contract_calls") @default(0)
-  storageAccesses    Int      @map("storage_accesses") @default(0)
-  txSizeBytes        Int      @map("tx_size_bytes") @default(0)
-  totalFee           String   @map("total_fee")
-  effectiveFeePerInstr String @map("effective_fee_per_instr") @default("0")
-  ledgerSequence     Int      @map("ledger_sequence")
-  ledgerCloseTime    DateTime @map("ledger_close_time")
-  failureFlag        Boolean  @map("failure_flag") @default(false)
-  errorCode          String?  @map("error_code")
-  createdAt          DateTime @map("created_at") @default(now())
-
-  @@index([contractAddress, ledgerCloseTime])
-  @@index([contractAddress, functionName])
-  @@index([ledgerSequence])
-  @@map("_gas_analytics")
-}
-
-model GasBenchmark {
-  id              String   @map("id") @id @default(cuid())
-  contractAddress String   @map("contract_address")
-  functionName    String   @map("function_name")
-  arguments       Json     @map("arguments") @default("{}")
-  cpuInstructions Int      @map("cpu_instructions") @default(0)
-  memoryBytes     Int      @map("memory_bytes") @default(0)
-  ledgerReadBytes Int      @map("ledger_read_bytes") @default(0)
-  ledgerWriteBytes Int     @map("ledger_write_bytes") @default(0)
-  ledgerEntryCount Int     @map("ledger_entry_count") @default(0)
-  totalFee        String   @map("total_fee")
-  // 'simulation' | 'historical_best' | 'historical_median'
-  source          String   @map("source") @default("simulation")
-  recordedAt      DateTime @map("recorded_at") @default(now())
-
-  @@index([contractAddress, functionName, recordedAt])
-  @@index([source])
-  @@map("_gas_benchmarks")
-}
-
-model GasAlert {
-  id              String   @map("id") @id @default(cuid())
-  contractAddress String   @map("contract_address")
-  // 'cost_spike' | 'anomaly' | 'inefficiency' | 'regression'
-  alertType       String   @map("alert_type")
-  // 'low' | 'medium' | 'high' | 'critical'
-  severity        String   @map("severity")
-  metric          String   @map("metric")
-  currentValue    Float    @map("current_value")
-  baselineValue   Float    @map("baseline_value")
-  deviationPct    Float    @map("deviation_pct")
-  txHash          String?  @map("tx_hash")
-  message         String   @map("message")
-  detectedAt      DateTime @map("detected_at") @default(now())
-
-  @@index([contractAddress, detectedAt])
-  @@index([alertType])
-  @@index([severity])
-  @@map("_gas_alerts")
-}
-
-model GasOptimizationSuggestion {
-  id              String   @map("id") @id @default(cuid())
-  contractAddress String   @map("contract_address")
-  functionName    String   @map("function_name")
-  suggestionType  String   @map("suggestion_type")
-  title           String   @map("title")
-  description     String   @map("description")
-  currentCost     String   @map("current_cost")
-  estimatedSavings String  @map("estimated_savings")
-  savingsPct      Int      @map("savings_pct") @default(0)
-  // 'low' | 'medium' | 'high'
-  effort          String   @map("effort") @default("medium")
-  // 'info' | 'warning' | 'critical'
-  severity        String   @map("severity") @default("info")
-  createdAt       DateTime @map("created_at") @default(now())
-  updatedAt       DateTime @map("updated_at") @updatedAt
-
-  @@unique([contractAddress, functionName, suggestionType])
-  @@index([contractAddress])
-  @@map("_gas_optimization_suggestions")
-}
-
-// ─── Token holder analytics ───────────────────────────────────────────────────
-
-model TokenHolder {
-  id              String   @map("id") @id @default(cuid())
-  contractAddress String   @map("contract_address")
-  holderAddress   String   @map("holder_address")
-  balance         String   @map("balance") @default("0")
-  balanceRaw      Float    @map("balance_raw") @default(0)
-  percentage      Float    @map("percentage") @default(0)
-  rank            Int      @map("rank") @default(0)
-  firstSeenAt     DateTime @map("first_seen_at") @default(now())
-  lastUpdatedAt   DateTime @map("last_updated_at") @default(now())
-
-  whaleAlerts WhaleAlert[]
-
-  @@unique([contractAddress, holderAddress])
-  @@index([contractAddress, balanceRaw])
-  @@index([holderAddress])
-  @@map("_token_holders")
-}
-
-model TokenConcentrationMetrics {
-  id                  String   @map("id") @id @default(cuid())
-  contractAddress     String   @map("contract_address")
-  nakamotoCoefficient Int      @map("nakamoto_coefficient")
-  hhi                 Float    @map("hhi")
-  giniCoefficient     Float    @map("gini_coefficient")
-  top10Pct            Float    @map("top10_pct")
-  top100Pct           Float    @map("top100_pct")
-  totalHolders        Int      @map("total_holders")
-  totalSupply         String   @map("total_supply")
-  computedAt          DateTime @map("computed_at") @default(now())
-
-  @@index([contractAddress, computedAt])
-  @@map("_token_concentration_metrics")
-}
-
-model HolderCohort {
-  id              String   @map("id") @id @default(cuid())
-  contractAddress String   @map("contract_address")
-  cohortPeriod    String   @map("cohort_period")
-  cohortStart     DateTime @map("cohort_start")
-  initialHolders  Int      @map("initial_holders")
-  retainedAt30d   Int?     @map("retained_at_30d")
-  retainedAt60d   Int?     @map("retained_at_60d")
-  retainedAt90d   Int?     @map("retained_at_90d")
-  avgHoldTime     Float?   @map("avg_hold_time")
-  createdAt       DateTime @map("created_at") @default(now())
-
-  @@index([contractAddress, cohortStart])
-  @@map("_holder_cohorts")
-}
-
-model WhaleAlert {
-  id              String   @map("id") @id @default(cuid())
-  contractAddress String   @map("contract_address")
-  holderAddress   String   @map("holder_address")
-  // 'large_transfer' | 'accumulation' | 'distribution' | 'whale_entry' | 'whale_exit'
-  alertType       String   @map("alert_type")
-  oldBalance      String   @map("old_balance")
-  newBalance      String   @map("new_balance")
-  changeAmt       String   @map("change_amt")
-  changePct       Float    @map("change_pct")
-  txHash          String?  @map("tx_hash")
-  detectedAt      DateTime @map("detected_at") @default(now())
-
-  holder TokenHolder @relation(fields: [contractAddress, holderAddress], references: [contractAddress, holderAddress], onDelete: Cascade)
-
-  @@index([contractAddress, detectedAt])
-  @@index([holderAddress])
-  @@index([alertType])
-  @@map("_whale_alerts")
-}
-
-// ─── Fuzzy search support ─────────────────────────────────────────────────────
-
-model SearchNGram {
-  id      String @map("id") @id @default(cuid())
-  docType String @map("doc_type")
-  docId   String @map("doc_id")
-  gram    String @map("gram")
-  position Int   @map("position")
-
-  @@index([docType, docId])
-  @@index([gram])
-  @@map("_search_ngrams")
-}
-
-model SearchSuggestion {
-  id      String @map("id") @id @default(cuid())
-  docType String @map("doc_type")
-  docId   String @map("doc_id")
-  prefix  String @map("prefix")
-  suffix  String? @map("suffix")
-  label   String @map("label")
-  weight  Int    @map("weight") @default(1)
-
-  @@unique([docType, prefix, docId])
-  @@index([prefix])
-  @@index([suffix])
-  @@index([weight])
-  @@map("_search_suggestions")
-}
-
-model SearchIndexState {
-  id          String    @map("id") @id
-  // 'idle' | 'rebuilding' | 'completed' | 'failed'
-  status      String    @map("status") @default("idle")
-  progress    Float     @map("progress") @default(0)
-  totalDocs   Int       @map("total_docs") @default(0)
-  indexedDocs Int       @map("indexed_docs") @default(0)
-  startedAt   DateTime? @map("started_at")
-  completedAt DateTime? @map("completed_at")
-  error       String?   @map("error")
-  updatedAt   DateTime  @map("updated_at") @updatedAt
-
-  @@map("_search_index_state")
-}
-
-// ─── SDK registry ─────────────────────────────────────────────────────────────
-
-model SdkVersion {
-  id            String   @map("id") @id @default(cuid())
-  language      String   @map("language")
-  version       String   @map("version")
-  apiVersion    String   @map("api_version")
-  changelog     String?  @map("changelog")
-  downloadCount Int      @map("download_count") @default(0)
-  isDeprecated  Boolean  @map("is_deprecated") @default(false)
-  publishedAt   DateTime @map("published_at") @default(now())
-
-  downloads SdkDownload[]
-
-  @@unique([language, version])
-  @@index([language, publishedAt])
-  @@index([isDeprecated])
-  @@map("_sdk_versions")
-}
-
-model SdkDownload {
-  id           String   @map("id") @id @default(cuid())
-  language     String   @map("language")
-  version      String   @map("version")
-  platform     String?  @map("platform")
-  userAgent    String?  @map("user_agent")
-  ipHash       String?  @map("ip_hash")
-  downloadedAt DateTime @map("downloaded_at") @default(now())
-
-  sdkVersion SdkVersion @relation(fields: [language, version], references: [language, version], onDelete: Cascade)
-
-  @@index([language, downloadedAt])
-  @@index([downloadedAt])
-  @@map("_sdk_downloads")
-}
-
-model ApiSpecSnapshot {
-  id        String   @map("id") @id @default(cuid())
-  version   String   @map("version") @unique
-  spec      Json     @map("spec")
-  hash      String   @map("hash")
-  createdAt DateTime @map("created_at") @default(now())
-
-  @@map("_api_spec_snapshots")
-}
-
-// ─── Audit subscriptions & external audits ────────────────────────────────────
-
-model AuditSubscription {
-  id              String    @map("id") @id @default(cuid())
-  contractAddress String    @map("contract_address")
-  userId          String?   @map("user_id")
-  alertTypes      String[]  @map("alert_types")
-  threshold       Int       @map("threshold") @default(10)
-  cooldownMinutes Int       @map("cooldown_minutes") @default(60)
-  emailAddress    String?   @map("email_address")
-  webhookUrl      String?   @map("webhook_url")
-  webhookSecret   String?   @map("webhook_secret")
-  slackWebhookUrl String?   @map("slack_webhook_url")
-  slackChannel    String?   @map("slack_channel")
-  isActive        Boolean   @map("is_active") @default(true)
-  lastTriggeredAt DateTime? @map("last_triggered_at")
-  createdAt       DateTime  @map("created_at") @default(now())
-  updatedAt       DateTime  @map("updated_at") @updatedAt
-
-  deliveries AuditNotificationDelivery[]
-
-  @@index([contractAddress, isActive])
-  @@index([userId])
-  @@index([isActive])
-  @@map("_audit_subscriptions")
-}
-
-model AuditNotificationDelivery {
-  id             String    @map("id") @id @default(cuid())
-  subscriptionId String    @map("subscription_id")
-  alertType      String    @map("alert_type")
-  // 'webhook' | 'slack' | 'email'
-  channel        String    @map("channel")
-  // 'success' | 'failed' | 'pending'
-  status         String    @map("status")
-  payload        Json      @map("payload") @default("{}")
-  httpStatus     Int?      @map("http_status")
-  responseBody   String?   @map("response_body")
-  errorMsg       String?   @map("error_msg")
-  deliveredAt    DateTime? @map("delivered_at")
-  createdAt      DateTime  @map("created_at") @default(now())
-
-  subscription AuditSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-
-  @@index([subscriptionId, createdAt])
-  @@index([status])
-  @@map("_audit_notification_deliveries")
-}
-
-model AuditorRegistry {
-  id                  String    @map("id") @id @default(cuid())
-  name                String    @map("name")
-  slug                String    @map("slug") @unique
-  website             String?   @map("website")
-  logoUrl             String?   @map("logo_url")
-  description         String?   @map("description")
-  contactEmail        String?   @map("contact_email")
-  twitterHandle       String?   @map("twitter_handle")
-  githubOrg           String?   @map("github_org")
-  verificationKey     String?   @map("verification_key")
-  verificationKeyAlgo String?   @map("verification_key_algo")
-  specializations     String[]  @map("specializations") @default([])
-  isVerified          Boolean   @map("is_verified") @default(false)
-  verifiedAt          DateTime? @map("verified_at")
-  verifiedBy          String?   @map("verified_by")
-  badgeTier           String?   @map("badge_tier")
-  trustScore          Float     @map("trust_score") @default(0)
-  totalAudits         Int       @map("total_audits") @default(0)
-  acceptedAudits      Int       @map("accepted_audits") @default(0)
-  rejectedAudits      Int       @map("rejected_audits") @default(0)
-  isActive            Boolean   @map("is_active") @default(true)
-  suspendedAt   DateTime? @map("suspended_at")
-  suspendReason String? @map("suspend_reason")
+// ── RBAC Permission System ───────────────────────────────────────────────────
+
+// Core permission definitions
+model Permission {
+  id                  String    @id
+  resource            String
+  action              String
+  scope               String?
+  description         String?
+  conditions          Json      @default("[]")
+  isSystemPermission  Boolean   @map("is_system_permission") @default(false)
   createdAt           DateTime  @map("created_at") @default(now())
   updatedAt           DateTime  @map("updated_at") @updatedAt
 
-  audits ExternalAudit[]
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+  apiKeyScopes    ApiKeyScope[]
 
-  @@index([isVerified, trustScore])
-  @@index([isActive])
-  @@map("_auditor_registry")
+  @@index([resource, action])
+  @@index([scope])
+  @@map("permissions")
 }
 
-model ExternalAudit {
-  id                     String    @map("id") @id @default(cuid())
-  contractAddress        String    @map("contract_address")
-  parentContractAddress  String?   @map("parent_contract_address")
-  auditorId              String?   @map("auditor_id")
-  auditorName            String    @map("auditor_name")
-  auditorVerificationKey String?   @map("auditor_verification_key")
-  reportType             String    @map("report_type")
-  reportUrl              String?   @map("report_url")
-  reportHash             String?   @map("report_hash")
-  reportSignature        String?   @map("report_signature")
-  findings               Json      @map("findings") @default("[]")
-  overallGrade           String?   @map("overall_grade")
-  summary                String?   @map("summary")
-  submittedAt            DateTime  @map("submitted_at") @default(now())
-  // 'pending' | 'verified' | 'rejected'
-  verificationStatus     String    @map("verification_status") @default("pending")
-  verifiedAt             DateTime? @map("verified_at")
-  rejectionReason        String?   @map("rejection_reason")
-  isPublic               Boolean   @map("is_public") @default(true)
-
-  auditor AuditorRegistry? @relation(fields: [auditorId], references: [id], onDelete: SetNull)
-
-  @@index([contractAddress, verificationStatus])
-  @@index([auditorId, submittedAt])
-  @@index([verificationStatus])
-  @@map("_external_audits")
-}
-
-model AuditVerificationRecord {
-  id              String   @map("id") @id @default(cuid())
-  certificateHash String   @map("certificate_hash")
-  // 'valid' | 'invalid'
-  result          String   @map("result")
-  verifierIp      String?  @map("verifier_ip")
-  verifierKey     String?  @map("verifier_key")
-  createdAt       DateTime @map("created_at") @default(now())
-  checkedAt    DateTime @map("checked_at") @default(now())
-
-  @@index([certificateHash])
-  @@index([createdAt])
-  @@map("_audit_verification_records")
-}
-
-// ─── Formal verification jobs ─────────────────────────────────────────────────
-
-model FormalVerificationJob {
-  id              String    @map("id") @id @default(cuid())
-  contractAddress String    @map("contract_address")
-  tool            String    @map("tool")
-  // 'running' | 'passed' | 'failed' | 'timeout' | 'unsupported' | 'error'
-  status          String    @map("status") @default("running")
-  passed          Boolean?  @map("passed")
-  sourceJobId     String?   @map("source_job_id")
-  specContent     String?   @map("spec_content")
-  specFileName    String?   @map("spec_file_name")
-  toolOptions     Json?     @map("tool_options")
-  triggeredBy     String    @map("triggered_by") @default("manual")
-  certId          String?   @map("cert_id")
-  propertyCount   Int       @map("property_count") @default(0)
-  provenCount     Int       @map("proven_count") @default(0)
-  violatedCount   Int       @map("violated_count") @default(0)
-  unknownCount    Int       @map("unknown_count") @default(0)
-  coveragePercent Float?    @map("coverage_percent")
-  counterExamples Json      @map("counter_examples") @default("[]")
-  toolOutput      String?   @map("tool_output")
-  reportUrl       String?   @map("report_url")
-  toolVersion     String?   @map("tool_version")
-  durationSeconds Int       @map("duration_seconds") @default(0)
-  startedAt       DateTime? @map("started_at")
-  completedAt     DateTime? @map("completed_at")
-  createdAt       DateTime  @map("created_at") @default(now())
-
-  @@index([contractAddress, createdAt])
-  @@index([status])
-  @@map("_formal_verification_jobs")
-}
-
-// ─── Flash loan attack forensics ──────────────────────────────────────────────
-
-model FlashLoanAttack {
-  id                 String   @map("id") @id @default(cuid())
-  txHash             String   @map("tx_hash") @unique
-  attacker           String   @map("attacker")
-  ledgerSequence     Int      @map("ledger_sequence")
-  detectedAt         DateTime @map("detected_at") @default(now())
-  attackArchetype    String   @map("attack_archetype")
-  attackSubtype      String?  @map("attack_subtype")
-  borrowedTotal      String   @map("borrowed_total")
-  borrowedTokens     Json     @map("borrowed_tokens") @default("[]")
-  repaidTotal        String   @map("repaid_total")
-  profitAmount       String   @map("profit_amount")
-  profitUsd          Float?   @map("profit_usd")
-  protocolCount      Int      @map("protocol_count") @default(1)
-  stepCount          Int      @map("step_count") @default(0)
-  fundFlowGraph      Json     @map("fund_flow_graph") @default("{}")
-  originalTvls       Json     @map("original_tvls") @default("{}")
-  riskScore          Float    @map("risk_score") @default(0)
-  attackerToxicity   Float?   @map("attacker_toxicity")
-  detectionLatencyMs Int      @map("detection_latency_ms") @default(0)
-  brokenInvariants   String[] @map("broken_invariants") @default([])
-  cweMappings        Json     @map("cwe_mappings") @default("[]")
-  isArbitrage        Boolean  @map("is_arbitrage") @default(false)
-  mevExtracted       String?  @map("mev_extracted")
-
-  @@index([detectedAt])
-  @@index([attacker])
-  @@index([attackArchetype])
-  @@index([profitUsd])
-  @@index([riskScore])
-  @@map("_flash_loan_attacks")
-}
-
-model AttackerProfile {
-  id              String   @map("id") @id @default(cuid())
-  address         String   @map("address") @unique
-  label           String?  @map("label")
-  attackCount     Int      @map("attack_count") @default(0)
-  totalProfitUsd  Float    @map("total_profit_usd") @default(0)
-  avgToxicity     Float?   @map("avg_toxicity")
-  preferredArchetype String? @map("preferred_archetype")
-  firstSeenAt     DateTime @map("first_seen_at") @default(now())
-  lastSeenAt      DateTime @map("last_seen_at") @default(now())
-
-  @@index([attackCount])
-  @@index([totalProfitUsd])
-  @@map("_attacker_profiles")
-}
-
-model ProtocolVulnerability {
-  id              String   @map("id") @id @default(cuid())
-  protocolAddress String   @map("protocol_address")
-  title           String   @map("title")
-  description     String?  @map("description")
-  // 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
-  severity        String   @map("severity")
-  parentArchetype String?  @map("parent_archetype")
-  totalLoss       String   @map("total_loss") @default("0")
-  exploitTxHash   String?  @map("exploit_tx_hash")
-  cweId           String?  @map("cwe_id")
-  cvssScore       Float?   @map("cvss_score")
-  discoveredAt    DateTime @map("discovered_at") @default(now())
-
-  @@index([protocolAddress])
-  @@index([severity])
-  @@map("_protocol_vulnerabilities")
-}
-
-// ─── Compliance screening ─────────────────────────────────────────────────────
-
-model SanctionedAddress {
-  id             String   @map("id") @id @default(cuid())
-  address        String   @map("address") @unique
-  name           String?  @map("name")
-  listSource     String   @map("list_source")
-  jurisdiction   String?  @map("jurisdiction")
-  sourceAccount  String?  @map("source_account")
-  addedAt        DateTime @map("added_at") @default(now())
-
-  @@index([addedAt])
-  @@map("_sanctioned_addresses")
-}
-
-model ComplianceFlag {
-  id                 String   @map("id") @id @default(cuid())
-  sourceAccount      String?  @map("source_account")
-  destinationAccount String?  @map("destination_account")
-  flagType           String   @map("flag_type")
-  // 'low' | 'medium' | 'high' | 'critical'
-  severity           String   @map("severity") @default("medium")
-  reason             String?  @map("reason")
-  createdAt          DateTime @map("created_at") @default(now())
-
-  @@index([sourceAccount])
-  @@index([destinationAccount])
-  @@index([createdAt])
-  @@map("_compliance_flags")
-}
-
-// ─── P2P indexing coordination ────────────────────────────────────────────────
-
-model PeerNode {
-  id               String   @map("id") @id
-  network          String   @map("network")
-  multiaddrs       String[] @map("multiaddrs") @default([])
-  challengesPassed Int      @map("challenges_passed") @default(0)
-  challengesFailed Int      @map("challenges_failed") @default(0)
-  lastSeenAt       DateTime @map("last_seen_at") @default(now())
-  createdAt        DateTime @map("created_at") @default(now())
-
-  @@index([network, lastSeenAt])
-  @@map("_peer_nodes")
-}
-
-model IndexerRangeClaim {
-  id                String   @map("id") @id @default(cuid())
-  rangeId           String   @map("range_id") @unique
-  network           String   @map("network")
-  startLedger       Int      @map("start_ledger")
-  endLedger         Int      @map("end_ledger")
-  lastIndexedLedger Int      @map("last_indexed_ledger") @default(0)
-  ownerPeerIds      String[] @map("owner_peer_ids") @default([])
-  lastClaimedAt     DateTime @map("last_claimed_at") @default(now())
-  updatedAt         DateTime @map("updated_at") @updatedAt
-
-  @@index([network, startLedger])
-  @@map("_indexer_range_claims")
-}
-
-model VerificationChallenge {
-  id               String   @map("id") @id @default(cuid())
-  network          String   @map("network")
-  ledgerSequence   Int      @map("ledger_sequence")
-  challengerPeerId String   @map("challenger_peer_id")
-  challengedPeerId String   @map("challenged_peer_id")
-  challengerHash   String   @map("challenger_hash")
-  challengedHash   String   @map("challenged_hash")
-  tiebreakerPeerId String?  @map("tiebreaker_peer_id")
-  tiebreakerHash   String?  @map("tiebreaker_hash")
-  // 'match' | 'mismatch' | 'tiebreak_resolved'
-  result           String   @map("result")
-  createdAt        DateTime @map("created_at") @default(now())
-
-  @@index([network, createdAt])
-  @@index([result])
-  @@map("_verification_challenges")
-}
-
-model ReindexTask {
-  id             String    @map("id") @id @default(cuid())
-  network        String    @map("network")
-  ledgerSequence Int       @map("ledger_sequence")
-  reason         String    @map("reason")
-  sourcePeerId   String?   @map("source_peer_id")
-  // 'pending' | 'in_progress' | 'done' | 'failed'
-  status         String    @map("status") @default("pending")
-  completedAt    DateTime? @map("completed_at")
+// Role definitions with inheritance
+model Role {
+  id             String    @id
+  name           String
+  description    String?
+  inheritsFrom   String[]  @map("inherits_from") @default([])
+  isSystemRole   Boolean   @map("is_system_role") @default(false)
+  conditions     Json      @default("[]")
   createdAt      DateTime  @map("created_at") @default(now())
+  updatedAt      DateTime  @map("updated_at") @updatedAt
 
-  @@index([network, status, createdAt])
-  @@index([ledgerSequence])
-  @@map("_reindex_tasks")
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@index([name])
+  @@map("roles")
 }
 
-model MonitoredAddress {
-  id              String  @map("id") @id @default(cuid())
-  address         String  @map("address")
-  chain           String  @map("chain")
-  label           String? @map("label")
-  minAlertUsd     Float?  @map("min_alert_usd")
-  alertOnTx       Boolean @map("alert_on_tx") @default(true)
-  alertOnBridging Boolean @map("alert_on_bridging") @default(true)
-  active          Boolean @map("active") @default(true)
-  createdAt       DateTime @map("created_at") @default(now())
-  updatedAt       DateTime @map("updated_at") @updatedAt
+// Role-permission assignments
+model RolePermission {
+  roleId       String    @map("role_id")
+  permissionId String    @map("permission_id")
+  grantedBy    String?   @map("granted_by")
+  grantedAt    DateTime  @map("granted_at") @default(now())
 
-  @@unique([address, chain])
-  @@index([active])
-  @@index([chain])
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
 }
 
-/// Per-node event log (version changes, state transitions). Written by
-/// src/indexer/network-indexer.ts; `nodeId` references NetworkNode.id.
-model NetworkNodeEvent {
-  id        String   @map("id") @id @default(cuid())
-  nodeId    String   @map("node_id")
-  eventType String   @map("event_type")
-  details   Json?    @map("details")
-  timestamp DateTime @map("timestamp")
-  createdAt DateTime @map("created_at") @default(now())
+// Multi-tenant support
+model Tenant {
+  id              String    @id
+  name            String
+  slug            String    @unique
+  parentTenantId  String?   @map("parent_tenant_id")
+  settings        Json      @default("{}")
+  isolationLevel  String    @map("isolation_level") @default("strict")
+  createdAt       DateTime  @map("created_at") @default(now())
+  updatedAt       DateTime  @map("updated_at") @updatedAt
 
-  node NetworkNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  parentTenant       Tenant?             @relation("TenantHierarchy", fields: [parentTenantId], references: [id])
+  childTenants       Tenant[]            @relation("TenantHierarchy")
+  users              WalletUser[]
+  apiKeys            DevApiKey[]
+  userRoles          UserRole[]
+  userPermissions    UserPermission[]
+  resourcePermissions ResourcePermission[]
 
-  @@index([nodeId, timestamp])
-  @@index([eventType])
-  @@map("_network_node_events")
+  @@index([slug])
+  @@index([parentTenantId])
+  @@map("tenants")
 }
 
-/// Periodic per-node metric snapshots (peers, latency, agreement rate).
-model NetworkNodeMetric {
-  id            String   @map("id") @id @default(cuid())
-  nodeId        String   @map("node_id")
-  timestamp     DateTime @map("timestamp")
-  peerCount     Int?     @map("peer_count")
-  latency       Float?   @map("latency")
-  agreementRate Float?   @map("agreement_rate")
-  createdAt     DateTime @map("created_at") @default(now())
+// User-role assignments (extends existing WalletUser)
+model UserRole {
+  userId     String    @map("user_id")
+  roleId     String    @map("role_id")
+  tenantId   String?   @map("tenant_id")
+  grantedBy  String?   @map("granted_by")
+  grantedAt  DateTime  @map("granted_at") @default(now())
+  expiresAt  DateTime? @map("expires_at")
+  conditions Json      @default("[]")
 
-  node NetworkNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  user   WalletUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  tenant Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  @@index([nodeId, timestamp])
-  @@map("_network_node_metrics")
+  @@id([userId, roleId, tenantId])
+  @@index([userId, tenantId])
+  @@index([roleId])
+  @@index([expiresAt])
+  @@map("user_roles")
 }
 
-/// One row per closed Stellar consensus round, keyed by ledger sequence.
-model NetworkConsensusRound {
-  id                String    @map("id") @id @default(cuid())
-  ledgerSeq         Int       @map("ledger_seq") @unique
-  startTime         DateTime  @map("start_time")
-  endTime           DateTime? @map("end_time")
-  durationMs        Int?      @map("duration_ms")
-  txCount           Int?      @map("tx_count")
-  successful        Boolean   @map("successful") @default(true)
-  nodesParticipated Int?      @map("nodes_participated")
-  quorumSetSize     Int?      @map("quorum_set_size")
-  createdAt         DateTime  @map("created_at") @default(now())
+// Direct user permissions (for exceptions)
+model UserPermission {
+  id           String    @id @default(cuid())
+  userId       String    @map("user_id")
+  permissionId String    @map("permission_id")
+  tenantId     String?   @map("tenant_id")
+  resourceType String?   @map("resource_type")
+  resourceId   String?   @map("resource_id")
+  grantedBy    String?   @map("granted_by")
+  grantedAt    DateTime  @map("granted_at") @default(now())
+  expiresAt    DateTime? @map("expires_at")
+  conditions   Json      @default("[]")
 
-  @@index([ledgerSeq])
-  @@map("_network_consensus_rounds")
+  user       WalletUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  tenant     Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, tenantId])
+  @@index([permissionId])
+  @@index([resourceType, resourceId])
+  @@index([expiresAt])
+  @@map("user_permissions")
 }
 
-/// Historical contract storage-state changes captured by src/archive;
-/// powers time-travel state queries and ledger diffs.
-model ContractStateChange {
-  id              String   @map("id") @id @default(cuid())
-  contractAddress String   @map("contract_address")
-  ledger          Int      @map("ledger")
-  ledgerCloseTime DateTime @map("ledger_close_time")
-  storageKey      String   @map("storage_key")
-  storageKeyHuman String?  @map("storage_key_human")
-  valueBefore     String?  @map("value_before")
-  valueAfter      String?  @map("value_after")
-  valueHuman      String?  @map("value_human")
-  operation       String   @map("operation")
-  transactionHash String?  @map("transaction_hash")
-  createdAt       DateTime @map("created_at") @default(now())
+// Enhanced API key scopes
+model ApiKeyScope {
+  id                   String    @id @default(cuid())
+  apiKeyId             String    @map("api_key_id")
+  permissionId         String    @map("permission_id")
+  resourceRestrictions Json      @map("resource_restrictions") @default("[]")
+  conditions           Json      @default("[]")
+  createdAt            DateTime  @map("created_at") @default(now())
 
-  @@index([contractAddress, ledger])
-  @@index([contractAddress, storageKey, ledger])
-  @@map("_contract_state_changes")
+  apiKey     DevApiKey  @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId])
+  @@index([permissionId])
+  @@map("api_key_scopes")
+}
+
+// Resource-level access control
+model ResourcePermission {
+  id            String    @id @default(cuid())
+  resourceType  String    @map("resource_type")
+  resourceId    String    @map("resource_id")
+  principalId   String    @map("principal_id")
+  principalType String    @map("principal_type")
+  permissions   String[]
+  grantedBy     String?   @map("granted_by")
+  grantedAt     DateTime  @map("granted_at") @default(now())
+  expiresAt     DateTime? @map("expires_at")
+  tenantId      String?   @map("tenant_id")
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([resourceType, resourceId])
+  @@index([principalId, principalType])
+  @@index([tenantId])
+  @@index([expiresAt])
+  @@map("resource_permissions")
+}
+
+// Permission evaluation cache
+model PermissionCache {
+  cacheKey    String   @id @map("cache_key")
+  userId      String?  @map("user_id")
+  apiKeyId    String?  @map("api_key_id")
+  tenantId    String?  @map("tenant_id")
+  permissions Json
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @map("created_at") @default(now())
+
+  @@index([userId, tenantId])
+  @@index([apiKeyId, tenantId])
+  @@index([expiresAt])
+  @@map("permission_cache")
 }

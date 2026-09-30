@@ -34,6 +34,28 @@ secret manager. If omitted, the server generates a 256-bit secret.
 
 New subscriptions start `verified: false`.
 
+Batch subscription example (requires the `webhookBatchDelivery` flag to be
+enabled by an administrator):
+
+```bash
+curl -X POST https://api.example.com/webhooks \
+  -H "X-Api-Key: $SOROBAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/hook","eventType":"transfer","deliveryStrategy":"batch","batchSize":50,"batchWindowMs":50}'
+```
+
+Subscriptions default to `deliveryStrategy: "immediate"`, preserving the
+single-event payload. To opt into aggregation, set `deliveryStrategy` to
+`"batch"` and optionally set `batchSize` (2-500, default 100) and
+`batchWindowMs` (0-60,000, default 50). Batch mode is available only while the
+`webhookBatchDelivery` feature flag is enabled and its migration is present.
+If the flag is switched off, new events fall back to immediate delivery unless
+they must queue behind an already-admitted batch for the same contract; queued
+batches continue draining. A batch subscription cannot be switched to
+immediate mode or changing its destination until pending batches have drained
+(409 `BATCH_QUEUE_NOT_DRAINED`). Switching from immediate to batch is also
+rejected with 409 while immediate deliveries are outstanding.
+
 ### Update
 
 ```bash
@@ -44,9 +66,10 @@ curl -X PATCH https://api.example.com/webhooks/$SUB_ID \
 ```
 
 `url`, `contractAddress`, `eventType`, and `topicSymbol` may be updated; pass
-`null` to clear a filter. Changing the `url` resets verification — run the
-handshake again. Deactivating (`active: false`) immediately cancels pending
-deliveries.
+`null` to clear a filter. `deliveryStrategy`, `batchSize`, and `batchWindowMs`
+may also be updated within the bounds above. Changing the `url` resets
+verification — run the handshake again. Deactivating (`active: false`)
+immediately cancels pending deliveries and queued events.
 
 ## Verification handshake (challenge/response)
 
@@ -128,6 +151,35 @@ Headers:
 - `X-Webhook-Signature: sha256=<hex HMAC-SHA256 of the raw body>`
 - `X-Webhook-Timestamp: <unix epoch ms>`
 
+Batch deliveries use this envelope instead:
+
+```json
+{
+  "batchId": "stable-for-this-batch",
+  "idempotencyKey": "sha256-hex",
+  "events": [{ "id": "string", "ledgerSequence": 0 }],
+  "attempt": 1
+}
+```
+
+The signature covers the complete raw JSON body. The request also includes
+`Idempotency-Key` with the same value as `idempotencyKey`. Event membership and
+the key are stable across retries; `attempt` increases. Consumers should
+deduplicate by `idempotencyKey`. Events are ordered per contract by ledger
+sequence, transaction hash, then event ID. Batch bodies are limited to 1 MB;
+the batch size is capped at 500 events. A single event too large for the body
+limit is recorded with `PAYLOAD_TOO_LARGE` and is not retried.
+
+`GET /webhooks/:id/deliveries` includes `idempotencyKey` and `errorCode`, but
+does not return persisted batch payload snapshots. Error codes are
+`SSRF_BLOCKED`, `HTTP_NON_2XX`, `NETWORK_ERROR`, and `PAYLOAD_TOO_LARGE`.
+
+## Replay retention
+
+Batch event snapshots and delivery metadata are retained for at least 90 days.
+This implementation does not yet provide an arbitrary-checkpoint replay API;
+retention is not equivalent to checkpoint replayability.
+
 ## Verifying signatures
 
 Sign the **raw request body bytes** (before JSON parsing) with HMAC-SHA256 using
@@ -168,6 +220,9 @@ window configured on the server.
 
 ## Retries
 
-Failed deliveries are retried with exponential backoff (`10s, 30s, 90s, 270s`
-up to 5 attempts). `RETRY` stops for inactive subscriptions and for URLs blocked
-by the SSRF guard. Inspect results via `GET /webhooks/:id/deliveries`.
+Immediate failed deliveries are retried with exponential backoff and stop after
+five attempts. Batch deliveries retry network and non-2xx failures indefinitely
+with capped exponential backoff so destination outages do not discard queued
+events. Retries stop for inactive subscriptions and for URLs blocked by the
+SSRF guard; those terminal outcomes are visible in delivery history. Inspect
+results via `GET /webhooks/:id/deliveries`.

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getCachedAbi, setCachedAbi, deleteCachedAbi } from '../indexer/abi-cache';
 import { fetchContractSpec } from '../indexer/wasm-spec';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { adminAuth } from '../middleware/adminAuth';
 
 export const abiRouter = Router({ mergeParams: true });
 
@@ -44,6 +45,7 @@ abiRouter.get(
  */
 abiRouter.put(
   '/',
+  adminAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { address } = req.params;
     const parsed = abiBodySchema.safeParse(req.body);
@@ -60,6 +62,7 @@ abiRouter.put(
  */
 abiRouter.delete(
   '/',
+  adminAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const { address } = req.params;
     try {

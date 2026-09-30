@@ -1,5 +1,6 @@
 import crypto from 'crypto';
-import { prismaWrite } from '../db';
+import { agentWrite } from './store';
+import type { AgentRow } from './store';
 import type {
   AgentStatus,
   CapabilityToken,
@@ -46,16 +47,16 @@ export class AgentEngine {
       ...params.resourceLimits,
     };
 
-    const agent = await prismaWrite.agent.create({
+    const agent = await agentWrite.agent.create({
       data: {
         name: params.name,
         description: params.description,
         ownerAddress: params.ownerAddress,
         templateId: params.templateId,
         status: 'deployed',
-        permissions: (params.permissions || template.defaultPermissions) as any,
-        resourceLimits: limits as any,
-        config: params.config as any,
+        permissions: params.permissions || template.defaultPermissions,
+        resourceLimits: limits,
+        config: params.config,
         maxDrawdown: limits.maxDrawdownPercent,
         currentDrawdown: 0,
         totalGasUsed: 0,
@@ -84,7 +85,7 @@ export class AgentEngine {
       archived: [],
     };
 
-    const agent = await prismaWrite.agent.findUnique({ where: { id: agentId } });
+    const agent = await agentWrite.agent.findUnique({ where: { id: agentId } });
     if (!agent) throw new Error(`Agent ${agentId} not found`);
 
     const currentStatus = agent.status as AgentStatus;
@@ -98,7 +99,7 @@ export class AgentEngine {
       updateData.lastExecutionAt = null;
     }
 
-    await prismaWrite.agent.update({
+    await agentWrite.agent.update({
       where: { id: agentId },
       data: updateData,
     });
@@ -110,7 +111,7 @@ export class AgentEngine {
     agentId: string,
     trigger: 'scheduled' | 'manual' | 'event' = 'scheduled',
   ): Promise<{ executionId: string; action: Record<string, unknown> | null; success: boolean }> {
-    const agent = await prismaWrite.agent.findUnique({ where: { id: agentId } });
+    const agent = await agentWrite.agent.findUnique({ where: { id: agentId } });
     if (!agent) throw new Error(`Agent ${agentId} not found`);
     const agentStatus = agent.status as string;
     if (agentStatus !== 'active' && agentStatus !== 'running') {
@@ -123,8 +124,8 @@ export class AgentEngine {
     const template = agentTemplates.find((t) => t.id === agent.templateId);
     if (!template) throw new Error(`Template ${agent.templateId} not found`);
 
-    const config = agent.config as Record<string, unknown>;
-    const permissions = (agent.permissions as unknown as CapabilityToken[]) || [];
+    const config = agent.config;
+    const permissions = agent.permissions || [];
 
     // Build input state snapshot (deterministic)
     const inputState = this.captureInputState(agent, config);
@@ -229,19 +230,17 @@ export class AgentEngine {
     trace.signature = this.signTrace(trace);
 
     // Record execution
-    const execution = await prismaWrite.agentExecution.create({
+    const execution = await agentWrite.agentExecution.create({
       data: {
         agentId,
         status: error ? 'failed' : 'success',
         trigger,
-        inputState: inputState as any,
-        decision: outputAction
-          ? { action: outputAction.type, params: outputAction }
-          : (null as any),
-        outputAction: outputAction as any,
+        inputState,
+        decision: outputAction ? { action: outputAction.type, params: outputAction } : null,
+        outputAction,
         reasoning: steps.map((s) => ({ step: s.stepIndex, reasoning: s.reasoning })),
         gasUsed: totalGasUsed,
-        trace: trace as any,
+        trace,
         traceHash: finalStateHash,
         signature: trace.signature,
         error,
@@ -250,7 +249,7 @@ export class AgentEngine {
     });
 
     // Update agent stats
-    await prismaWrite.agent.update({
+    await agentWrite.agent.update({
       where: { id: agentId },
       data: {
         totalExecutions: { increment: 1 },
@@ -279,7 +278,7 @@ export class AgentEngine {
   }
 
   private captureInputState(
-    agent: Record<string, unknown>,
+    agent: AgentRow,
     config: Record<string, unknown>,
   ): Record<string, unknown> {
     // Deterministic state snapshot - sorts keys for consistent hashing
@@ -365,28 +364,28 @@ export class AgentEngine {
     }
   }
 
-  private async enforceResourceLimits(agent: Record<string, unknown>): Promise<void> {
-    const limits = (agent.resourceLimits as ResourceLimits) || DEFAULT_RESOURCE_LIMITS;
+  private async enforceResourceLimits(agent: AgentRow): Promise<void> {
+    const limits = agent.resourceLimits || DEFAULT_RESOURCE_LIMITS;
 
     // Check daily gas
     const dayGas = Number(agent.currentDayGasUsed || 0);
     if (dayGas >= limits.maxGasPerDay) {
       await this.createAlert(
-        agent.id as string,
+        agent.id,
         'budget_exceeded',
         'critical',
         `Daily gas budget exhausted: ${dayGas}/${limits.maxGasPerDay}`,
       );
-      await this.transitionStatus(agent.id as string, 'paused');
+      await this.transitionStatus(agent.id, 'paused');
       throw new Error(`Daily gas budget exhausted: ${dayGas}/${limits.maxGasPerDay}`);
     }
 
     // Check max executions per day
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayCount = await prismaWrite.agentExecution.count({
+    const todayCount = await agentWrite.agentExecution.count({
       where: {
-        agentId: agent.id as string,
+        agentId: agent.id,
         createdAt: { gte: today },
       },
     });
@@ -396,13 +395,13 @@ export class AgentEngine {
   }
 
   private async resetDailyGasIfNeeded(agentId: string): Promise<void> {
-    const agent = await prismaWrite.agent.findUnique({ where: { id: agentId } });
+    const agent = await agentWrite.agent.findUnique({ where: { id: agentId } });
     if (!agent) return;
 
     const lastReset = agent.gasResetAt;
     const now = new Date();
     if (lastReset && now.getTime() - lastReset.getTime() > 24 * 60 * 60 * 1000) {
-      await prismaWrite.agent.update({
+      await agentWrite.agent.update({
         where: { id: agentId },
         data: { currentDayGasUsed: 0, gasResetAt: now },
       });
@@ -410,12 +409,12 @@ export class AgentEngine {
   }
 
   async checkCircuitBreakers(agentId: string): Promise<void> {
-    const agent = await prismaWrite.agent.findUnique({ where: { id: agentId } });
+    const agent = await agentWrite.agent.findUnique({ where: { id: agentId } });
     if (!agent) return;
 
     // Check failure rate (last 20 executions)
     if (agent.totalExecutions >= 5) {
-      const recentExecutions = await prismaWrite.agentExecution.findMany({
+      const recentExecutions = await agentWrite.agentExecution.findMany({
         where: { agentId, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
         orderBy: { createdAt: 'desc' },
         take: 20,
@@ -478,17 +477,17 @@ export class AgentEngine {
     message: string,
     data?: Record<string, unknown>,
   ): Promise<void> {
-    await prismaWrite.agentAlert.create({
+    await agentWrite.agentAlert.create({
       data: {
         agentId,
         type,
         severity,
         message,
-        data: (data || {}) as any,
+        data: data || {},
       },
     });
 
-    await prismaWrite.agent.update({
+    await agentWrite.agent.update({
       where: { id: agentId },
       data: { lastAlertAt: new Date() },
     });
@@ -497,7 +496,7 @@ export class AgentEngine {
   // ── DCA Execution ────────────────────────────────────────────────────
 
   private async executeDCA(
-    agent: Record<string, unknown>,
+    agent: AgentRow,
     config: DCAConfig,
     steps: ExecutionStep[],
     startIndex: number,
@@ -517,9 +516,7 @@ export class AgentEngine {
     }
 
     const now = new Date();
-    const lastExecution = agent.lastExecutionAt
-      ? new Date(agent.lastExecutionAt as string)
-      : new Date(0);
+    const lastExecution = agent.lastExecutionAt ?? new Date(0);
     const minutesSinceLast = (now.getTime() - lastExecution.getTime()) / (1000 * 60);
 
     if (minutesSinceLast < config.frequencyMinutes) {
@@ -580,9 +577,9 @@ export class AgentEngine {
 
     // Update DCA config
     const updatedConfig = { ...config, buysExecuted: config.buysExecuted + 1 };
-    await prismaWrite.agent.update({
-      where: { id: agent.id as string },
-      data: { config: updatedConfig as any },
+    await agentWrite.agent.update({
+      where: { id: agent.id },
+      data: { config: updatedConfig },
     });
 
     return {
@@ -599,7 +596,7 @@ export class AgentEngine {
   // ── Governance Execution ─────────────────────────────────────────────
 
   private async executeGovernance(
-    agent: Record<string, unknown>,
+    agent: AgentRow,
     config: GovernanceConfig,
     steps: ExecutionStep[],
     startIndex: number,
@@ -674,7 +671,7 @@ export class AgentEngine {
   // ── Yield Optimizer Execution ────────────────────────────────────────
 
   private async executeYieldOptimizer(
-    agent: Record<string, unknown>,
+    agent: AgentRow,
     config: YieldOptimizerConfig,
     steps: ExecutionStep[],
     startIndex: number,
@@ -751,7 +748,7 @@ export class AgentEngine {
   // ── MEV Protector Execution ──────────────────────────────────────────
 
   private async executeMevProtector(
-    agent: Record<string, unknown>,
+    agent: AgentRow,
     config: MevProtectorConfig,
     steps: ExecutionStep[],
     startIndex: number,
@@ -805,7 +802,7 @@ export class AgentEngine {
   // ── Stop-Loss Execution ──────────────────────────────────────────────
 
   private async executeStopLoss(
-    agent: Record<string, unknown>,
+    agent: AgentRow,
     config: StopLossConfig,
     steps: ExecutionStep[],
     startIndex: number,
@@ -866,7 +863,7 @@ export class AgentEngine {
   // ── Liquidation Sniper Execution ─────────────────────────────────────
 
   private async executeLiquidationSniper(
-    agent: Record<string, unknown>,
+    agent: AgentRow,
     config: LiquidationSniperConfig,
     steps: ExecutionStep[],
     startIndex: number,
@@ -925,7 +922,7 @@ export class AgentEngine {
   // ── Compliance Execution ─────────────────────────────────────────────
 
   private async executeCompliance(
-    agent: Record<string, unknown>,
+    agent: AgentRow,
     config: ComplianceConfig,
     steps: ExecutionStep[],
     startIndex: number,

@@ -2,7 +2,8 @@ import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { StrKey } from '@stellar/stellar-sdk';
 import { config } from '../config';
-import { prismaRead, prismaWrite } from '../db';
+import { prismaRead } from '../db';
+import { sandboxRead, sandboxTransaction, sandboxWrite, type SandboxSessionRow } from './store';
 import { createVerifier } from '../verification/verifier';
 import { estimateTemplateCall } from './gas-model';
 import { serializeMetrics, buildCallMetrics } from './meter';
@@ -61,7 +62,7 @@ type RuntimeDocument = {
   runtime: RuntimeBlock;
 };
 
-type SandboxSessionRecord = Awaited<ReturnType<typeof prismaWrite.sandboxSession.findUnique>>;
+type SandboxSessionRecord = SandboxSessionRow;
 
 export type SandboxTemplate = {
   id: string;
@@ -70,7 +71,7 @@ export type SandboxTemplate = {
   category: string;
   wasmBase64: string;
   abi: unknown;
-  defaultArgs: unknown;
+  defaultArgs: Record<string, unknown>;
   deploymentGuide: string;
   version: string;
   author: string;
@@ -485,9 +486,15 @@ function makeContractId(seed: string, index: number, salt?: string): string {
   return StrKey.encodeContract(deriveBytes(seed, `contract:${suffix}`, index));
 }
 
+/**
+ * Coerce an untrusted contract-argument value to a fixed decimal string.
+ * Anything that is not a number, numeric string or Decimal falls back.
+ */
 function toDecimalString(value: unknown, fallback = '0'): string {
-  if (value === undefined || value === null) return fallback;
-  return new Prisma.Decimal(String(value)).toFixed();
+  if (typeof value === 'number' || typeof value === 'string' || value instanceof Prisma.Decimal) {
+    return new Prisma.Decimal(value).toFixed();
+  }
+  return fallback;
 }
 
 function decimalPlus(left: string, right: string): string {
@@ -669,7 +676,7 @@ async function persistBundle(bundle: RuntimeBundle): Promise<void> {
   bundle.session.state = clone(bundle.document);
   bundle.session.ledgerSequence = bundle.document.runtime.ledgerSequence;
   bundle.session.ledgerTimestamp = new Date(bundle.document.runtime.ledgerTimestamp);
-  await prismaWrite.sandboxSession.update({
+  await sandboxWrite.sandboxSession.update({
     where: { id: bundle.session.id },
     data: {
       // _sandbox_sessions.state is a TEXT column; serialise the document.
@@ -681,7 +688,7 @@ async function persistBundle(bundle: RuntimeBundle): Promise<void> {
 }
 
 async function refreshBundle(sessionId: string): Promise<RuntimeBundle> {
-  const session = await prismaRead.sandboxSession.findUnique({ where: { id: sessionId } });
+  const session = await sandboxRead.sandboxSession.findUnique({ where: { id: sessionId } });
   if (!session) throw new Error('Session not found');
   const document = hydrateDocument(session);
   const bundle: RuntimeBundle = { session: clone(session), document };
@@ -935,10 +942,10 @@ async function rewriteLiveRows(
   accounts: AccountState[],
   contracts: ContractState[],
 ): Promise<void> {
-  await prismaWrite.$transaction([
-    prismaWrite.sandboxAccount.deleteMany({ where: { sessionId } }),
-    prismaWrite.sandboxContract.deleteMany({ where: { sessionId } }),
-    prismaWrite.sandboxAccount.createMany({
+  await sandboxTransaction.$transaction([
+    sandboxWrite.sandboxAccount.deleteMany({ where: { sessionId } }),
+    sandboxWrite.sandboxContract.deleteMany({ where: { sessionId } }),
+    sandboxWrite.sandboxAccount.createMany({
       data: accounts.map((account) => ({
         sessionId,
         // address mirrors the account's public key; the legacy column is required.
@@ -950,7 +957,7 @@ async function rewriteLiveRows(
         isPreFunded: account.isPreFunded,
       })),
     }),
-    prismaWrite.sandboxContract.createMany({
+    sandboxWrite.sandboxContract.createMany({
       data: contracts.map((contract) => ({
         sessionId,
         address: contract.contractId,
@@ -1018,7 +1025,7 @@ export class SandboxEngine {
       version: input.version,
       author: input.author,
     };
-    const persisted = await prismaWrite.contractTemplate.upsert({
+    const persisted = await sandboxWrite.contractTemplate.upsert({
       where: { id: template.id },
       update: {
         name: template.name,
@@ -1057,7 +1064,7 @@ export class SandboxEngine {
     const prefundedBalance = toDecimalString(input.preFundedBalance ?? '10000');
     const ttlHours = input.ttlHours ?? 4;
 
-    const session = await prismaWrite.sandboxSession.create({
+    const session = await sandboxWrite.sandboxSession.create({
       data: {
         userId: input.userId ?? null,
         status: 'active',
@@ -1090,7 +1097,7 @@ export class SandboxEngine {
     const bundle: RuntimeBundle = { session, document };
     activeSessions.set(session.id, bundle);
 
-    await prismaWrite.sandboxAccount.createMany({
+    await sandboxWrite.sandboxAccount.createMany({
       data: Object.values(genesis.accounts).map((account) => ({
         sessionId: session.id,
         address: account.publicKey,
@@ -1109,14 +1116,14 @@ export class SandboxEngine {
   async getSession(sessionId: string): Promise<SessionSummary> {
     const bundle = activeSessions.get(sessionId) ?? (await refreshBundle(sessionId));
     const [snapshotCount, callCount] = await Promise.all([
-      prismaRead.sandboxSnapshot.count({ where: { sessionId } }),
-      prismaRead.sandboxCall.count({ where: { sessionId } }),
+      sandboxRead.sandboxSnapshot.count({ where: { sessionId } }),
+      sandboxRead.sandboxCall.count({ where: { sessionId } }),
     ]);
     return summarizeSession(bundle.session, bundle.document, snapshotCount, callCount);
   }
 
   async destroySession(sessionId: string): Promise<{ destroyed: true }> {
-    await prismaWrite.sandboxSession.update({
+    await sandboxWrite.sandboxSession.update({
       where: { id: sessionId },
       data: { status: 'destroyed' },
     });
@@ -1127,7 +1134,7 @@ export class SandboxEngine {
   async pauseSession(sessionId: string): Promise<SessionSummary> {
     const bundle = getBundleOrThrow(sessionId);
     bundle.session.status = 'paused';
-    await prismaWrite.sandboxSession.update({
+    await sandboxWrite.sandboxSession.update({
       where: { id: sessionId },
       data: { status: 'paused' },
     });
@@ -1145,7 +1152,7 @@ export class SandboxEngine {
 
   async snapshotSession(input: SnapshotInput): Promise<any> {
     const bundle = getBundleOrThrow(input.sessionId);
-    const snapshot = await prismaWrite.sandboxSnapshot.create({
+    const snapshot = await sandboxWrite.sandboxSnapshot.create({
       data: {
         sessionId: input.sessionId,
         // SandboxSnapshot.label carries the human name; data/state are JSON
@@ -1159,7 +1166,7 @@ export class SandboxEngine {
   }
 
   async listSnapshots(sessionId: string): Promise<any[]> {
-    return prismaRead.sandboxSnapshot.findMany({
+    return sandboxRead.sandboxSnapshot.findMany({
       where: { sessionId },
       orderBy: { createdAt: 'desc' },
     });
@@ -1167,7 +1174,7 @@ export class SandboxEngine {
 
   async restoreSnapshot(sessionId: string, snapshotId: string): Promise<SessionSummary> {
     const bundle = getBundleOrThrow(sessionId);
-    const snapshot = await prismaRead.sandboxSnapshot.findUnique({ where: { id: snapshotId } });
+    const snapshot = await sandboxRead.sandboxSnapshot.findUnique({ where: { id: snapshotId } });
     if (!snapshot || snapshot.sessionId !== sessionId) throw new Error('Snapshot not found');
     bundle.document.runtime = clone(
       (typeof snapshot.state === 'string'
@@ -1206,7 +1213,7 @@ export class SandboxEngine {
       isPreFunded: input.isPreFunded ?? false,
     };
     bundle.document.runtime.accounts[publicKey] = account;
-    await prismaWrite.sandboxAccount.create({
+    await sandboxWrite.sandboxAccount.create({
       data: {
         sessionId,
         address: publicKey,
@@ -1226,7 +1233,7 @@ export class SandboxEngine {
     const account = bundle.document.runtime.accounts[input.publicKey];
     if (!account) throw new Error('Account not found');
     account.balance = decimalPlus(account.balance, toDecimalString(input.amount));
-    await prismaWrite.sandboxAccount.update({
+    await sandboxWrite.sandboxAccount.update({
       where: { sessionId_publicKey: { sessionId, publicKey: input.publicKey } },
       data: { balance: account.balance },
     });
@@ -1303,7 +1310,7 @@ export class SandboxEngine {
     };
 
     bundle.document.runtime.contracts[contractId] = contract;
-    await prismaWrite.sandboxContract.create({
+    await sandboxWrite.sandboxContract.create({
       data: {
         sessionId: input.sessionId,
         address: contractId,
@@ -1386,7 +1393,7 @@ export class SandboxEngine {
     const before = clone(contract.state);
     const outcome = executeTemplateFunction(contract, input.functionName, args, sourceAccount);
     if (!outcome.success) {
-      const call = await prismaWrite.sandboxCall.create({
+      const call = await sandboxWrite.sandboxCall.create({
         data: {
           sessionId: input.sessionId,
           contractId: input.contractId,
@@ -1421,8 +1428,8 @@ export class SandboxEngine {
     contract.totalCalls += 1;
     bundle.document.runtime.nextCallIndex += 1;
 
-    await prismaWrite.$transaction([
-      prismaWrite.sandboxContract.update({
+    await sandboxTransaction.$transaction([
+      sandboxWrite.sandboxContract.update({
         where: {
           sessionId_contractId: { sessionId: input.sessionId, contractId: input.contractId },
         },
@@ -1432,7 +1439,7 @@ export class SandboxEngine {
           totalCalls: contract.totalCalls,
         },
       }),
-      prismaWrite.sandboxCall.create({
+      sandboxWrite.sandboxCall.create({
         data: {
           sessionId: input.sessionId,
           contractId: input.contractId,
@@ -1495,14 +1502,14 @@ export class SandboxEngine {
   }
 
   async listCalls(sessionId: string): Promise<any[]> {
-    return prismaRead.sandboxCall.findMany({
+    return sandboxRead.sandboxCall.findMany({
       where: { sessionId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async getCall(sessionId: string, callId: string): Promise<any> {
-    const call = await prismaRead.sandboxCall.findUnique({ where: { id: callId } });
+    const call = await sandboxRead.sandboxCall.findUnique({ where: { id: callId } });
     if (!call || call.sessionId !== sessionId) throw new Error('Call not found');
     return call;
   }
@@ -1526,7 +1533,7 @@ export class SandboxEngine {
 
   async stateDiff(sessionId: string, sinceSnapshotId: string): Promise<any> {
     const bundle = getBundleOrThrow(sessionId);
-    const snapshot = await prismaRead.sandboxSnapshot.findUnique({
+    const snapshot = await sandboxRead.sandboxSnapshot.findUnique({
       where: { id: sinceSnapshotId },
     });
     if (!snapshot || snapshot.sessionId !== sessionId) throw new Error('Snapshot not found');
@@ -1724,7 +1731,7 @@ export class SandboxEngine {
       0,
     );
     const findings = this.generateFuzzFindings(contract, input.strategies);
-    const run = await prismaWrite.fuzzRun.create({
+    const run = await sandboxWrite.fuzzRun.create({
       data: {
         sessionId: input.sessionId,
         contractId: input.contractId,
@@ -1736,7 +1743,7 @@ export class SandboxEngine {
         completedAt: new Date(),
       },
     });
-    await prismaWrite.fuzzFinding.createMany({
+    await sandboxWrite.fuzzFinding.createMany({
       data: findings.map((finding) => ({
         fuzzRunId: run.id,
         severity: finding.severity,
@@ -1752,32 +1759,32 @@ export class SandboxEngine {
   }
 
   async stopFuzz(runId: string): Promise<any> {
-    return prismaWrite.fuzzRun.update({
+    return sandboxWrite.fuzzRun.update({
       where: { id: runId },
       data: { status: 'cancelled', completedAt: new Date() },
     });
   }
 
   async getFuzzRun(runId: string): Promise<any> {
-    return prismaRead.fuzzRun.findUnique({ where: { id: runId } });
+    return sandboxRead.fuzzRun.findUnique({ where: { id: runId } });
   }
 
   async listFuzzRuns(sessionId?: string): Promise<any[]> {
-    return prismaRead.fuzzRun.findMany({
+    return sandboxRead.fuzzRun.findMany({
       where: sessionId ? { sessionId } : undefined,
       orderBy: { startedAt: 'desc' },
     });
   }
 
   async listFuzzFindings(runId: string): Promise<any[]> {
-    return prismaRead.fuzzFinding.findMany({
+    return sandboxRead.fuzzFinding.findMany({
       where: { fuzzRunId: runId },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async replayFinding(runId: string, findingId: string): Promise<any> {
-    const finding = await prismaRead.fuzzFinding.findUnique({ where: { id: findingId } });
+    const finding = await sandboxRead.fuzzFinding.findUnique({ where: { id: findingId } });
     if (!finding || finding.fuzzRunId !== runId) throw new Error('Finding not found');
     return { replayed: true, finding };
   }
@@ -1791,7 +1798,7 @@ export class SandboxEngine {
     const session = input.sessionId
       ? getBundleOrThrow(input.sessionId)
       : await this.createSession({});
-    const run = await prismaWrite.sandboxCiRun.create({
+    const run = await sandboxWrite.sandboxCiRun.create({
       data: {
         sessionId: typeof session === 'object' && 'session' in session ? session.session.id : null,
         status: 'running',
@@ -1856,7 +1863,7 @@ export class SandboxEngine {
     }
 
     const completedAt = new Date();
-    await prismaWrite.sandboxCiRun.update({
+    await sandboxWrite.sandboxCiRun.update({
       where: { id: run.id },
       data: {
         status: passed ? 'passed' : 'failed',
@@ -1869,13 +1876,13 @@ export class SandboxEngine {
   }
 
   async getCiResult(runId: string): Promise<any> {
-    return prismaRead.sandboxCiRun.findUnique({ where: { id: runId } });
+    return sandboxRead.sandboxCiRun.findUnique({ where: { id: runId } });
   }
 
   async shareSession(sessionId: string, expiresAt?: Date): Promise<any> {
     const bundle = getBundleOrThrow(sessionId);
     const shareId = crypto.randomUUID();
-    return prismaWrite.sandboxShare.create({
+    return sandboxWrite.sandboxShare.create({
       data: {
         sessionId,
         shareId,
@@ -1888,7 +1895,7 @@ export class SandboxEngine {
   }
 
   async viewShare(shareId: string): Promise<any> {
-    const share = await prismaRead.sandboxShare.findUnique({ where: { shareId } });
+    const share = await sandboxRead.sandboxShare.findUnique({ where: { shareId } });
     if (!share) throw new Error('Share not found');
     return share;
   }
@@ -2460,7 +2467,7 @@ export default spec('${contract.name ?? 'contract'}_spec', '${contractId}', [
     invariants: string[],
   ): { ok: boolean; details?: Record<string, unknown> } {
     const balances = state.balances as Record<string, unknown> | undefined;
-    const totalSupply = String((state as Record<string, any>).totalSupply ?? '0');
+    const totalSupply = String(state.totalSupply ?? '0');
     const summedBalances = Object.values(balances ?? {}).reduce<string>(
       (sum, value) => decimalPlus(sum, String(value)),
       '0',

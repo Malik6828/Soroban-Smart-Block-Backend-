@@ -4,7 +4,12 @@
  * Triggers whale alerts on large balance movements.
  */
 
-import { prismaRead, prismaWrite } from '../db';
+import {
+  tokenHolderRead,
+  tokenHolderWrite,
+  type HolderBalanceChange,
+  type TokenHolderDelta,
+} from '../token-holders/store';
 
 const WHALE_THRESHOLD_PCT = 0.01; // 1% of supply change triggers alert
 const ACCUMULATION_THRESHOLD_PCT = 0.001; // 0.1% accumulation in 24h
@@ -34,7 +39,7 @@ async function updateHolderBalance(
   delta: number,
   txHash: string,
 ): Promise<void> {
-  const existing = await prismaRead.tokenHolder.findUnique({
+  const existing = await tokenHolderRead.tokenHolder.findUnique({
     where: { contractAddress_holderAddress: { contractAddress, holderAddress } },
   });
 
@@ -43,7 +48,7 @@ async function updateHolderBalance(
 
   if (newBalance === 0 && !existing) return;
 
-  const allHolders = await prismaRead.tokenHolder.aggregate({
+  const allHolders = await tokenHolderRead.tokenHolder.aggregate({
     where: { contractAddress },
     _sum: { balanceRaw: true },
   });
@@ -51,7 +56,7 @@ async function updateHolderBalance(
   const percentage = totalSupply > 0 ? (newBalance / totalSupply) * 100 : 0;
 
   if (existing) {
-    await prismaWrite.tokenHolder.update({
+    await tokenHolderWrite.tokenHolder.update({
       where: { contractAddress_holderAddress: { contractAddress, holderAddress } },
       data: {
         balance: String(newBalance),
@@ -61,7 +66,7 @@ async function updateHolderBalance(
       },
     });
   } else {
-    await prismaWrite.tokenHolder.create({
+    await tokenHolderWrite.tokenHolder.create({
       data: {
         contractAddress,
         holderAddress,
@@ -74,38 +79,40 @@ async function updateHolderBalance(
     });
   }
 
-  await checkAndEmitWhaleAlert(
+  const change: TokenHolderDelta = {
     contractAddress,
     holderAddress,
+    delta,
+    txHash,
     oldBalance,
     newBalance,
     totalSupply,
-    txHash,
-  );
+  };
+
+  await checkAndEmitWhaleAlert(change);
 }
 
-async function checkAndEmitWhaleAlert(
-  contractAddress: string,
-  holderAddress: string,
-  oldBalance: number,
-  newBalance: number,
-  totalSupply: number,
-  txHash: string,
-): Promise<void> {
+async function checkAndEmitWhaleAlert(delta: TokenHolderDelta): Promise<void> {
+  const { contractAddress, holderAddress, oldBalance, newBalance, totalSupply, txHash } = delta;
   if (totalSupply === 0) return;
 
-  const changePct = totalSupply > 0 ? Math.abs(newBalance - oldBalance) / totalSupply : 0;
+  const movement: HolderBalanceChange = {
+    oldBalance,
+    newBalance,
+    changeAmt: Math.abs(newBalance - oldBalance),
+    changePct: totalSupply > 0 ? Math.abs(newBalance - oldBalance) / totalSupply : 0,
+  };
 
-  if (changePct >= WHALE_THRESHOLD_PCT) {
-    await prismaWrite.whaleAlert.create({
+  if (movement.changePct >= WHALE_THRESHOLD_PCT) {
+    await tokenHolderWrite.whaleAlert.create({
       data: {
         contractAddress,
         holderAddress,
         alertType: 'large_transfer',
         oldBalance: String(oldBalance),
         newBalance: String(newBalance),
-        changeAmt: String(Math.abs(newBalance - oldBalance)),
-        changePct: Number((changePct * 100).toFixed(4)),
+        changeAmt: String(movement.changeAmt),
+        changePct: Number((movement.changePct * 100).toFixed(4)),
         txHash,
         detectedAt: new Date(),
       },
@@ -114,7 +121,7 @@ async function checkAndEmitWhaleAlert(
 
   // Check for accumulation pattern over 24h
   const yesterday = new Date(Date.now() - 86400e3);
-  const recentAlerts = await prismaRead.whaleAlert.findMany({
+  const recentAlerts = await tokenHolderRead.whaleAlert.findMany({
     where: {
       contractAddress,
       holderAddress,
@@ -128,15 +135,15 @@ async function checkAndEmitWhaleAlert(
   const accumulatedPct = totalSupply > 0 ? accumulatedAmt / totalSupply : 0;
 
   if (accumulatedPct >= ACCUMULATION_THRESHOLD_PCT && newBalance > oldBalance) {
-    await prismaWrite.whaleAlert.create({
+    await tokenHolderWrite.whaleAlert.create({
       data: {
         contractAddress,
         holderAddress,
         alertType: 'accumulation',
         oldBalance: String(oldBalance),
         newBalance: String(newBalance),
-        changeAmt: String(Math.abs(newBalance - oldBalance)),
-        changePct: Number((changePct * 100).toFixed(4)),
+        changeAmt: String(movement.changeAmt),
+        changePct: Number((movement.changePct * 100).toFixed(4)),
         txHash,
         detectedAt: new Date(),
       },
@@ -145,7 +152,7 @@ async function checkAndEmitWhaleAlert(
 }
 
 async function recomputeConcentrationMetrics(contractAddress: string): Promise<void> {
-  const holders = await prismaRead.tokenHolder.findMany({
+  const holders = await tokenHolderRead.tokenHolder.findMany({
     where: { contractAddress, balanceRaw: { gt: 0 } },
     orderBy: { balanceRaw: 'desc' },
     select: { balanceRaw: true, percentage: true },
@@ -179,7 +186,7 @@ async function recomputeConcentrationMetrics(contractAddress: string): Promise<v
   const top10 = holders.slice(0, 10).reduce((s, h) => s + h.percentage, 0);
   const top100 = holders.slice(0, 100).reduce((s, h) => s + h.percentage, 0);
 
-  await prismaWrite.tokenConcentrationMetrics.create({
+  await tokenHolderWrite.tokenConcentrationMetrics.create({
     data: {
       contractAddress,
       nakamotoCoefficient: nakamoto,
@@ -196,12 +203,12 @@ async function recomputeConcentrationMetrics(contractAddress: string): Promise<v
   // Re-rank holders
   for (let i = 0; i < Math.min(holders.length, 10000); i++) {
     const h = holders[i];
-    const existing = await prismaRead.tokenHolder.findFirst({
+    const existing = await tokenHolderRead.tokenHolder.findFirst({
       where: { contractAddress, balanceRaw: h.balanceRaw },
       select: { contractAddress: true, holderAddress: true },
     });
     if (existing) {
-      await prismaWrite.tokenHolder.update({
+      await tokenHolderWrite.tokenHolder.update({
         where: {
           contractAddress_holderAddress: {
             contractAddress: existing.contractAddress,

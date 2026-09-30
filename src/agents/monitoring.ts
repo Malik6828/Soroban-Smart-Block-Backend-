@@ -1,4 +1,11 @@
-import { prismaRead, prismaWrite } from '../db';
+import { agentRead, agentWrite } from './store';
+import type {
+  AgentAlertWithAgent,
+  AgentExecutionRow,
+  AgentExecutionWithRelations,
+  AgentRow,
+  AgentRowWithCounts,
+} from './store';
 import { logger } from '../logger';
 
 class AgentMonitor {
@@ -27,7 +34,7 @@ class AgentMonitor {
 
   async runHealthChecks(): Promise<void> {
     try {
-      const activeAgents = await prismaRead.agent.findMany({
+      const activeAgents = await agentRead.agent.findMany({
         where: { status: { in: ['active', 'running'] } },
       });
 
@@ -39,14 +46,14 @@ class AgentMonitor {
     }
   }
 
-  private async checkAgentHealth(agent: Record<string, unknown>): Promise<void> {
-    const agentId = agent.id as string;
-    const limits = (agent.resourceLimits as Record<string, number>) || {};
+  private async checkAgentHealth(agent: AgentRow): Promise<void> {
+    const agentId = agent.id;
+    const limits = agent.resourceLimits || ({} as AgentRow['resourceLimits']);
 
     // Inactivity check
     if (agent.lastExecutionAt) {
       const inactiveHours =
-        (Date.now() - new Date(agent.lastExecutionAt as string).getTime()) / (1000 * 60 * 60);
+        (Date.now() - new Date(agent.lastExecutionAt).getTime()) / (1000 * 60 * 60);
       if (inactiveHours > 24) {
         await this.createAlertIfNotExisting(
           agentId,
@@ -57,7 +64,7 @@ class AgentMonitor {
       }
     } else if (agent.status === 'running') {
       // Agent is running but never executed - check if it's been more than 24h since activation
-      const createdAt = new Date(agent.createdAt as string);
+      const createdAt = new Date(agent.createdAt);
       const hoursSinceCreation = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
       if (hoursSinceCreation > 24) {
         await this.createAlertIfNotExisting(
@@ -71,7 +78,7 @@ class AgentMonitor {
 
     // Failure rate check
     if (Number(agent.totalExecutions) >= 5) {
-      const recentExecs = await prismaRead.agentExecution.findMany({
+      const recentExecs = await agentRead.agentExecution.findMany({
         where: { agentId, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
         orderBy: { createdAt: 'desc' },
         take: 20,
@@ -110,25 +117,25 @@ class AgentMonitor {
     severity: string,
     message: string,
   ): Promise<void> {
-    const existing = await prismaRead.agentAlert.findFirst({
+    const existing = await agentRead.agentAlert.findFirst({
       where: {
         agentId,
-        type: type as never,
+        type,
         acknowledged: false,
         createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       },
     });
 
     if (!existing) {
-      await prismaWrite.agentAlert.create({
+      await agentWrite.agentAlert.create({
         data: {
           agentId,
-          type: type as never,
-          severity: severity as never,
+          type,
+          severity,
           message,
         },
       });
-      await prismaWrite.agent.update({
+      await agentWrite.agent.update({
         where: { id: agentId },
         data: { lastAlertAt: new Date() },
       });
@@ -139,8 +146,8 @@ class AgentMonitor {
     const where: Record<string, unknown> = {};
     if (ownerAddress) where.ownerAddress = ownerAddress;
 
-    const agents = await prismaRead.agent.findMany({
-      where: where as Record<string, unknown>,
+    const agents = await agentRead.agent.findMany<AgentRowWithCounts>({
+      where,
       include: {
         _count: {
           select: {
@@ -156,7 +163,7 @@ class AgentMonitor {
 
     const statusCounts: Record<string, number> = {};
     for (const a of agents) {
-      const s = a.status as string;
+      const s = a.status;
       statusCounts[s] = (statusCounts[s] || 0) + 1;
     }
 
@@ -203,12 +210,12 @@ class AgentMonitor {
   }) {
     const where: Record<string, unknown> = {};
     if (params.agentId) where.agentId = params.agentId;
-    if (params.severity) where.severity = params.severity as never;
+    if (params.severity) where.severity = params.severity;
     if (params.acknowledged !== undefined) where.acknowledged = params.acknowledged;
 
     const [alerts, total] = await Promise.all([
-      prismaRead.agentAlert.findMany({
-        where: where as Record<string, unknown>,
+      agentRead.agentAlert.findMany<AgentAlertWithAgent>({
+        where,
         orderBy: { createdAt: 'desc' },
         skip: ((params.page || 1) - 1) * (params.limit || 50),
         take: params.limit || 50,
@@ -216,21 +223,21 @@ class AgentMonitor {
           agent: { select: { name: true, templateId: true } },
         },
       }),
-      prismaRead.agentAlert.count({ where: where as Record<string, unknown> }),
+      agentRead.agentAlert.count({ where }),
     ]);
 
     return { alerts, total, page: params.page || 1, limit: params.limit || 50 };
   }
 
   async acknowledgeAlert(alertId: string): Promise<void> {
-    await prismaWrite.agentAlert.update({
+    await agentWrite.agentAlert.update({
       where: { id: alertId },
       data: { acknowledged: true, acknowledgedAt: new Date() },
     });
   }
 
   async getExecutionTrace(executionId: string) {
-    const execution = await prismaRead.agentExecution.findUnique({
+    const execution = await agentRead.agentExecution.findUnique<AgentExecutionWithRelations>({
       where: { id: executionId },
       include: {
         agent: { select: { name: true, templateId: true } },
@@ -251,13 +258,13 @@ class AgentMonitor {
     if (params.status) where.status = params.status;
 
     const [executions, total] = await Promise.all([
-      prismaRead.agentExecution.findMany({
-        where: where as Record<string, unknown>,
+      agentRead.agentExecution.findMany<AgentExecutionRow>({
+        where,
         orderBy: { createdAt: 'desc' },
         skip: ((params.page || 1) - 1) * (params.limit || 50),
         take: params.limit || 50,
       }),
-      prismaRead.agentExecution.count({ where: where as Record<string, unknown> }),
+      agentRead.agentExecution.count({ where }),
     ]);
 
     return { executions, total, page: params.page || 1, limit: params.limit || 50 };
@@ -267,8 +274,8 @@ class AgentMonitor {
     const where: Record<string, unknown> = {};
     if (ownerAddress) where.ownerAddress = ownerAddress;
 
-    const agents = await prismaRead.agent.findMany({
-      where: where as Record<string, unknown>,
+    const agents = await agentRead.agent.findMany({
+      where,
     });
 
     const agentIds = agents.map((a) => a.id);
@@ -277,19 +284,19 @@ class AgentMonitor {
     const last30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     const [executions7d, executions30d, alerts] = await Promise.all([
-      prismaRead.agentExecution.findMany({
+      agentRead.agentExecution.findMany({
         where: {
           agentId: { in: agentIds.length > 0 ? agentIds : [''] },
           createdAt: { gte: last7d },
         },
       }),
-      prismaRead.agentExecution.findMany({
+      agentRead.agentExecution.findMany({
         where: {
           agentId: { in: agentIds.length > 0 ? agentIds : [''] },
           createdAt: { gte: last30d },
         },
       }),
-      prismaRead.agentAlert.findMany({
+      agentRead.agentAlert.findMany({
         where: {
           agentId: { in: agentIds.length > 0 ? agentIds : [''] },
           acknowledged: false,

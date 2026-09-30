@@ -36,6 +36,27 @@ export interface FlagDefinition {
 
 export const FEATURE_FLAG_DEFINITIONS: FlagDefinition[] = [
   {
+    key: 'webhookBatchDelivery',
+    description:
+      'Durable, opt-in aggregated webhook deliveries with per-subscription windows and bounded batch sizes.',
+    requiredTables: ['_webhook_outbox_events'],
+    defaultEnabled: false,
+  },
+  {
+    key: 'gasFeeAlerts',
+    description:
+      'User-managed high and low network fee thresholds, evaluated against indexed fee snapshots.',
+    requiredTables: ['_gas_fee_alert_rules', '_gas_fee_alert_events', '_gas_analytics_snapshots'],
+    defaultEnabled: false,
+  },
+  {
+    key: 'contractAbiSubmissions',
+    description:
+      'Community ABI submissions with admin moderation and publication into the contract registry.',
+    requiredTables: ['_contract_abi_submissions', '_contract_abi_submission_events'],
+    defaultEnabled: false,
+  },
+  {
     key: 'privacyWs',
     description:
       'Privacy WebSocket broadcaster (/ws/v1/privacy and /ws/v1/privacy/alerts); streams privacy-protocol transactions and anomaly alerts.',

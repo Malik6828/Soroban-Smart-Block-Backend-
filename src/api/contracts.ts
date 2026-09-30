@@ -8,6 +8,7 @@ import { contractAuditRouter } from './contract-audit';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { config } from '../config';
 import { getProtocolDeployments } from '../indexer/registry';
+import { adminAuth } from '../middleware/adminAuth';
 
 /**
  * @swagger
@@ -487,6 +488,7 @@ export async function registerContractMetadata(data: ContractRegistrationInput) 
 // POST /contracts — register ABI metadata (optionally per network)
 contractRouter.post(
   '/',
+  adminAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const parsed = abiSchema.safeParse(req.body);
     if (!parsed.success) {

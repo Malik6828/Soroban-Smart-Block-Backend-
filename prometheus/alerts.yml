@@ -183,6 +183,58 @@ groups:
             GQL_SUBSCRIPTION_MAX_GLOBAL; see the runbook.
           runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/graphql-subscriptions/runbook.md#capacity-exhausted"
 
+  # Webhook batch delivery SLOs are defined in docs/webhook-batch-delivery-runbook.md.
+  - name: soroban_explorer_webhook_batch_delivery
+    interval: 30s
+    rules:
+      - record: webhook_batch:delivery_error_ratio:rate1h
+        expr: |
+          sum(rate(webhook_batch_operations_total{operation="delivery",outcome=~"http_error|retry|ssrf_blocked|payload_too_large"}[1h]))
+          /
+          clamp_min(sum(rate(webhook_batch_operations_total{operation="delivery",outcome=~"success|http_error|retry|ssrf_blocked|payload_too_large"}[1h])), 1e-9)
+
+      - alert: WebhookBatchErrorBudgetFastBurn
+        expr: webhook_batch:delivery_error_ratio:rate1h > (14.4 * 0.001)
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Webhook batch delivery is burning its error budget quickly"
+          description: >
+            The one-hour webhook batch delivery error ratio is {{ $value | humanizePercentage }}.
+            The SLO allows 0.1% failed attempts; this is a fast-burn condition.
+            Check destination errors, SSRF blocks, and retry backlog.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/webhook-batch-delivery-runbook.md"
+
+      - alert: WebhookBatchP99LatencyExceeded
+        expr: histogram_quantile(0.99, sum(rate(webhook_event_to_delivery_seconds_bucket{mode="batch"}[5m])) by (le)) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Webhook batch p99 event-to-client latency exceeds 100 ms"
+          description: >
+            p99 is {{ $value }} seconds over five minutes. Check batch window,
+            worker poll delay, outbox depth, indexer lag, and destination latency.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/webhook-batch-delivery-runbook.md#latency-slo"
+
+      - alert: WebhookOutboxBackpressure
+        expr: webhook_outbox_events > 40000
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Webhook outbox is nearing its per-subscription admission ceiling"
+          description: >
+            The aggregate pending/in-flight outbox count is {{ $value }} and has
+            crossed the 40,000 operating threshold. A single subscription is
+            capped at 50,000; identify per-subscription backlog and slow
+            destinations before admission backpressure begins.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/webhook-batch-delivery-runbook.md#backpressure"
+
       - alert: GraphQLSubscriptionAdmissionBudgetSlowBurn
         expr: graphql_subscriptions:admission_error_ratio:rate6h > (6 * 0.005)
         for: 30m
@@ -235,6 +287,62 @@ groups:
           description: "Bridge p99 is {{ $value | humanizeDuration }}."
           runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/graphql-subscriptions/runbook.md#latency"
 
+  # ── Contract ABI submission registry (ECO01) ───────────────────────────────
+  # Availability SLO: 99.5% over 30 days; 0.5% monthly error budget.
+  # Validation SLO: p99 <= 250 ms under the committed 10x PostgreSQL soak.
+  - name: soroban_explorer_contract_abi_submissions
+    interval: 30s
+    rules:
+      - record: contract_abi_submissions:server_error_ratio:rate1h
+        expr: |
+          sum(rate(contract_abi_submission_operations_total{outcome="error"}[1h]))
+          /
+          clamp_min(sum(rate(contract_abi_submission_operations_total{outcome!~"invalid|rejected|disabled|schema_unavailable"}[1h])), 1e-9)
+
+      - record: contract_abi_submissions:server_error_ratio:rate6h
+        expr: |
+          sum(rate(contract_abi_submission_operations_total{outcome="error"}[6h]))
+          /
+          clamp_min(sum(rate(contract_abi_submission_operations_total{outcome!~"invalid|rejected|disabled|schema_unavailable"}[6h])), 1e-9)
+
+      - alert: ContractAbiSubmissionBudgetFastBurn
+        expr: contract_abi_submissions:server_error_ratio:rate1h > (14.4 * 0.005)
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Contract ABI submission error budget burning fast"
+          description: >
+            Workflow server errors are consuming the 0.5% monthly budget at a fast-burn
+            rate. Disable contractAbiSubmissions and follow the recovery runbook.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/contract-abi-submissions/runbook.md#alerts-and-slos"
+
+      - alert: ContractAbiSubmissionBudgetSlowBurn
+        expr: contract_abi_submissions:server_error_ratio:rate6h > (6 * 0.005)
+        for: 30m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Contract ABI submission error budget burning"
+          description: >
+            Workflow server errors exceed the 6x burn-rate threshold over 6 hours.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/contract-abi-submissions/runbook.md#alerts-and-slos"
+
+      - alert: ContractAbiSubmissionValidationLatencyHigh
+        expr: histogram_quantile(0.99, sum by (le) (rate(contract_abi_submission_validation_duration_seconds_bucket[10m]))) > 0.25
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Contract ABI indexed-evidence validation p99 exceeds 250ms"
+          description: >
+            Validation latency exceeds its 250ms SLO. Check PostgreSQL health and
+            the contract/function/ledger query plan before raising capacity.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/contract-abi-submissions/runbook.md#alerts-and-slos"
+
   # ── Try-it API console (DX04) ──────────────────────────────────────────────
   # SLOs: docs/try-it/design.md §SLOs · Runbook: docs/try-it/runbook.md
   #   SLO-1 catalog availability: ≥ 99.9% of catalog responses are not 503 (30d).
@@ -277,3 +385,59 @@ groups:
             {{ $value | humanizePercentage }} of console-originated API requests returned 5xx.
             Usually mirrors an API incident; check HTTP5xxSurgeRatio first.
           runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/try-it/runbook.md#console-requests-failing"
+
+  # ── Gas fee alerts ──────────────────────────────────────────────────────────
+  # Delivery-attempt objective: >= 99.5% successful attempts over 30 days.
+  # Event-to-client target: p99 < 100ms; not yet load-tested at sustained peak.
+  - name: soroban_explorer_gas_fee_alerts
+    interval: 30s
+    rules:
+      - record: gas_fee_alerts:delivery_error_ratio:rate1h
+        expr: |
+          sum(rate(gas_fee_alert_delivery_attempts_total{outcome=~"http_error|network_error|ssrf_blocked"}[1h]))
+          /
+          clamp_min(sum(rate(gas_fee_alert_delivery_attempts_total{outcome=~"success|http_error|network_error|ssrf_blocked"}[1h])), 1e-9)
+
+      - record: gas_fee_alerts:delivery_error_ratio:rate6h
+        expr: |
+          sum(rate(gas_fee_alert_delivery_attempts_total{outcome=~"http_error|network_error|ssrf_blocked"}[6h]))
+          /
+          clamp_min(sum(rate(gas_fee_alert_delivery_attempts_total{outcome=~"success|http_error|network_error|ssrf_blocked"}[6h])), 1e-9)
+
+      - alert: GasFeeAlertDeliveryBudgetFastBurn
+        expr: gas_fee_alerts:delivery_error_ratio:rate1h > (14.4 * 0.005)
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Gas fee alert delivery is burning its error budget quickly"
+          description: >
+            Gas alert delivery failures exceed the 14.4x fast-burn threshold against
+            the 0.5% monthly attempt-error budget. Disable gasFeeAlerts and inspect
+            webhook delivery history, SSRF errors, and worker/database health.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/GAS_FEE_ALERTS.md#rollout-and-recovery"
+
+      - alert: GasFeeAlertDeliveryBudgetSlowBurn
+        expr: gas_fee_alerts:delivery_error_ratio:rate6h > (6 * 0.005)
+        for: 30m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Gas fee alert delivery is consuming its error budget"
+          description: "Delivery failures exceed the 6x slow-burn threshold over six hours."
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/GAS_FEE_ALERTS.md#rollout-and-recovery"
+
+      - alert: GasFeeAlertEventToClientP99High
+        expr: histogram_quantile(0.99, sum by (le) (rate(gas_fee_alert_event_to_delivery_seconds_bucket[10m]))) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Gas fee alert event-to-client p99 exceeds 100ms"
+          description: >
+            The measured p99 is {{ $value | humanizeDuration }}. This alert objective
+            requires sustained-load verification before it can be considered an SLO.
+          runbook_url: "https://github.com/Soroban-Smart-Block-Explorer/Soroban-Smart-Block-Backend-/blob/main/docs/GAS_FEE_ALERTS.md#telemetry-and-error-behavior"

@@ -28,6 +28,13 @@ vi.mock('../../src/db', () => ({
     gasBenchmark: {
       findMany: vi.fn().mockResolvedValue([]),
     },
+    gasFeeAlertRule: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
+    gasFeeAlertEvent: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   },
   prismaWrite: {
     gasAlert: {
@@ -45,6 +52,25 @@ vi.mock('../../src/db', () => ({
         gasFee: 500000,
       }),
     },
+    gasFeeAlertRule: {
+      create: vi.fn(),
+      update: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+  },
+}));
+
+vi.mock('../../src/feature-flags', () => ({
+  featureFlags: {
+    isAvailable: vi.fn().mockResolvedValue(true),
+    isEnabled: vi.fn().mockResolvedValue(true),
+  },
+}));
+
+vi.mock('../../src/middleware/apiKeyAuth', () => ({
+  requireApiKey: (req: any, _res: any, next: any) => {
+    req.apiKey = { developerId: 'developer-test' };
+    next();
   },
 }));
 
@@ -58,12 +84,14 @@ vi.mock('../../src/logger', () => ({
 }));
 
 // Import after mocking
-import { gasRouter } from '../../src/api/gas';
+import { gasFeeAlertsRouter, gasRouter } from '../../src/api/gas';
+import * as db from '../../src/db';
 
 function buildTestApp(): Express {
   const app = express();
   app.use(express.json());
   app.use('/gas', gasRouter);
+  app.use('/gas', gasFeeAlertsRouter);
   return app;
 }
 
@@ -296,6 +324,76 @@ describe('Gas Analytics API Router', () => {
 
       const res = await request(app).post('/gas/alerts').send(alert);
       expect([400, 404]).toContain(res.status);
+    });
+  });
+
+  describe('gas fee alert rules', () => {
+    it('creates a high-fee rule owned by the authenticated developer', async () => {
+      vi.mocked(db.prismaWrite.gasFeeAlertRule.create).mockResolvedValue({
+        id: 'fee-rule-1',
+        developerId: 'developer-test',
+        network: 'mainnet',
+        direction: 'high',
+        thresholdStroops: '1000000',
+      } as any);
+
+      const res = await request(app).post('/gas/fee-alert-rules').send({
+        network: 'mainnet',
+        direction: 'high',
+        thresholdStroops: '1000000',
+      });
+
+      expect(res.status).toBe(201);
+      expect(db.prismaWrite.gasFeeAlertRule.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ developerId: 'developer-test', thresholdStroops: '1000000' }),
+      });
+    });
+
+    it('lists only rules owned by the authenticated developer on the requested network', async () => {
+      vi.mocked(db.prismaRead.gasFeeAlertRule.findMany).mockResolvedValue([]);
+
+      const res = await request(app).get('/gas/fee-alert-rules?network=testnet');
+
+      expect(res.status).toBe(200);
+      expect(db.prismaRead.gasFeeAlertRule.findMany).toHaveBeenCalledWith({
+        where: { developerId: 'developer-test', network: 'testnet' },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+    });
+
+    it('lists only the authenticated developer\'s fee crossing events', async () => {
+      vi.mocked(db.prismaRead.gasFeeAlertEvent.findMany).mockResolvedValue([]);
+
+      const res = await request(app).get('/gas/fee-alert-events?network=mainnet');
+
+      expect(res.status).toBe(200);
+      expect(db.prismaRead.gasFeeAlertEvent.findMany).toHaveBeenCalledWith({
+        where: { developerId: 'developer-test', network: 'mainnet' },
+        orderBy: { bucketEnd: 'desc' },
+        take: 50,
+      });
+    });
+
+    it('rejects zero and non-decimal thresholds', async () => {
+      for (const thresholdStroops of ['0', '-1', '1.5', '1e6']) {
+        const res = await request(app).post('/gas/fee-alert-rules').send({
+          network: 'mainnet',
+          direction: 'low',
+          thresholdStroops,
+        });
+        expect(res.status).not.toBe(201);
+      }
+      expect(db.prismaWrite.gasFeeAlertRule.create).not.toHaveBeenCalled();
+    });
+
+    it('does not update a rule owned by another developer', async () => {
+      vi.mocked(db.prismaRead.gasFeeAlertRule.findFirst).mockResolvedValue(null);
+
+      const res = await request(app).patch('/gas/fee-alert-rules/other-rule').send({ isActive: false });
+
+      expect(res.status).toBe(404);
+      expect(db.prismaWrite.gasFeeAlertRule.update).not.toHaveBeenCalled();
     });
   });
 
