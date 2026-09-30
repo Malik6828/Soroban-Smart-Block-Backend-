@@ -5682,3 +5682,114 @@ model PermissionCache {
   @@index([expiresAt])
   @@map("permission_cache")
 }
+
+// ── Cross-chain identity graph ────────────────────────────────────────────────
+
+model IdentityGraph {
+  id          String   @id @default(cuid()) @map("id")
+  ownerId     String?  @map("owner_id")
+  displayName String?  @map("display_name") @db.VarChar(200)
+  avatarUrl   String?  @map("avatar_url")
+  metadata    Json     @map("metadata") @default("{}")
+  createdAt   DateTime @map("created_at") @default(now())
+  updatedAt   DateTime @map("updated_at") @updatedAt
+
+  addresses ChainAddress[]
+  linksOut  IdentityLink[] @relation("IdentityLinkSource")
+  linksIn   IdentityLink[] @relation("IdentityLinkTarget")
+
+  @@index([ownerId])
+  @@map("identity_graphs")
+}
+
+model ChainAddress {
+  id         String   @id @default(cuid()) @map("id")
+  identityId String   @map("identity_id")
+  chain      String   @map("chain") @db.VarChar(50)
+  address    String   @map("address")
+  label      String?  @map("label") @db.VarChar(200)
+  verifyProof String? @map("verify_proof")
+  metadata   Json     @map("metadata") @default("{}")
+  createdAt  DateTime @map("created_at") @default(now())
+
+  identity IdentityGraph @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  bridgeTransfersFrom BridgeTransfer[] @relation("BridgeTransferFromAddress")
+  bridgeTransfersTo   BridgeTransfer[] @relation("BridgeTransferToAddress")
+
+  @@unique([chain, address], map: "chain_address")
+  @@index([identityId])
+  @@map("chain_addresses")
+}
+
+model IdentityLink {
+  id               String   @id @default(cuid()) @map("id")
+  sourceIdentityId String   @map("source_identity_id")
+  targetIdentityId String   @map("target_identity_id")
+  linkType         String   @map("link_type") @default("same-user") @db.VarChar(50)
+  confidence       Float    @map("confidence") @default(1.0)
+  evidence         Json     @map("evidence") @default("[]")
+  createdAt        DateTime @map("created_at") @default(now())
+  updatedAt        DateTime @map("updated_at") @updatedAt
+
+  sourceIdentity IdentityGraph @relation("IdentityLinkSource", fields: [sourceIdentityId], references: [id], onDelete: Cascade)
+  targetIdentity IdentityGraph @relation("IdentityLinkTarget", fields: [targetIdentityId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceIdentityId, targetIdentityId])
+  @@index([sourceIdentityId])
+  @@index([targetIdentityId])
+  @@map("identity_links")
+}
+
+model BridgeTransfer {
+  id             String    @id @default(cuid()) @map("id")
+  fromChain      String    @map("from_chain") @db.VarChar(50)
+  toChain        String    @map("to_chain") @db.VarChar(50)
+  fromAddress    String    @map("from_address")
+  toAddress      String    @map("to_address")
+  asset          String    @map("asset") @db.VarChar(100)
+  amount         String    @map("amount")
+  bridgeProtocol String?   @map("bridge_protocol") @db.VarChar(100)
+  txHashSource   String?   @map("tx_hash_source")
+  txHashDest     String?   @map("tx_hash_dest")
+  status         String    @map("status") @default("pending") @db.VarChar(20)
+  timestamp      DateTime  @map("timestamp")
+  metadata       Json      @map("metadata") @default("{}")
+  fromAddressId  String?   @map("from_address_id")
+  toAddressId    String?   @map("to_address_id")
+  createdAt      DateTime  @map("created_at") @default(now())
+
+  fromChainAddress ChainAddress? @relation("BridgeTransferFromAddress", fields: [fromAddressId], references: [id])
+  toChainAddress   ChainAddress? @relation("BridgeTransferToAddress", fields: [toAddressId], references: [id])
+
+  @@index([fromAddress])
+  @@index([toAddress])
+  @@index([fromChain, toChain])
+  @@index([status])
+  @@index([timestamp(sort: Desc)])
+  @@index([fromAddressId])
+  @@index([toAddressId])
+  @@map("bridge_transfers")
+}
+
+// ── Audit bot channel subscriptions ──────────────────────────────────────────
+
+model AuditSubscription {
+  id              String   @id @default(cuid()) @map("id")
+  contractAddress String   @map("contract_address")
+  userId          String   @map("user_id")
+  alertTypes      String[] @map("alert_types")
+  threshold       Int      @map("threshold") @default(10)
+  cooldownMinutes Int      @map("cooldown_minutes") @default(60)
+  slackWebhookUrl String?  @map("slack_webhook_url")
+  slackChannel    String?  @map("slack_channel") @db.VarChar(200)
+  webhookUrl      String?  @map("webhook_url")
+  isActive        Boolean  @map("is_active") @default(true)
+  createdAt       DateTime @map("created_at") @default(now())
+  updatedAt       DateTime @map("updated_at") @updatedAt
+
+  @@index([contractAddress, userId])
+  @@index([isActive])
+  @@index([userId])
+  @@map("audit_subscriptions")
+}
