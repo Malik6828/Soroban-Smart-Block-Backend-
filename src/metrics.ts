@@ -343,3 +343,35 @@ export const indexerErrorDlqTotal = new Counter({
   labelNames: ['reason'],
   registers: [registry],
 });
+
+// ── Health probe metrics (#918) ───────────────────────────────────────────────
+// Track latency and outcome of /healthz, /readyz, and /health probe endpoints
+// so probe traffic is observable and regressions are caught in CI load tests.
+
+export const healthProbeRequestsTotal = new Counter({
+  name: 'health_probe_requests_total',
+  help: 'Total number of health probe requests by endpoint and status',
+  labelNames: ['endpoint', 'status_code'],
+  registers: [registry],
+});
+
+export const healthProbeDurationSeconds = new Histogram({
+  name: 'health_probe_duration_seconds',
+  help: 'Duration of health probe responses in seconds by endpoint',
+  labelNames: ['endpoint'],
+  // Sub-millisecond buckets appropriate for cheap liveness probes.
+  // /healthz should be <1ms; /readyz should be <50ms.
+  buckets: [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1],
+  registers: [registry],
+});
+
+// OTel mirror of probe counters — feeds OTLP exporters (Grafana Cloud, etc.)
+const healthProbeMeter = otelMetrics.getMeter('soroban-health-probes');
+export const healthProbeRequestsOtel = healthProbeMeter.createCounter(
+  'health.probe.requests',
+  { description: 'Total health probe requests by endpoint and outcome' },
+);
+export const healthProbeDurationOtel = healthProbeMeter.createHistogram(
+  'health.probe.duration',
+  { unit: 's', description: 'Health probe response time in seconds' },
+);

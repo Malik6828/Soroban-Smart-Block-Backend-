@@ -106,7 +106,7 @@ RUN mkdir -p /tmp/.npm && chmod 1777 /tmp
 USER appuser
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/healthz || exit 1
 
 # 4001: libp2p listen port (P2P_LISTEN_ADDR), only relevant when P2P_ENABLED=true.
 EXPOSE 3000 4001
