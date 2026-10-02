@@ -1,5 +1,5 @@
 import { Logger } from '../logger';
-import { db } from '../db';
+import { rawQuery } from '../db/raw';
 
 /**
  * Graceful Degradation Service
@@ -177,7 +177,7 @@ export class GracefulDegradationService {
     this.skippedLedgers.set(ledgerId, { reason, priority });
 
     try {
-      await db.query(
+      await rawQuery(
         `
         INSERT INTO skipped_ledgers (ledger_id, reason, priority_level, sampled_at)
         VALUES ($1, $2, $3, NOW())
@@ -197,7 +197,7 @@ export class GracefulDegradationService {
     limit: number = 1000,
   ): Promise<Array<{ ledgerId: number; priority: string }>> {
     try {
-      const result = await db.query(
+      const result = await rawQuery(
         `
         SELECT ledger_id, priority_level
         FROM skipped_ledgers
@@ -223,7 +223,7 @@ export class GracefulDegradationService {
    */
   async markLedgerBackfilled(ledgerId: number): Promise<void> {
     try {
-      await db.query(
+      await rawQuery(
         `
         UPDATE skipped_ledgers
         SET backfilled_at = NOW()
@@ -303,7 +303,7 @@ export class GracefulDegradationService {
     backfillQueueSize: number;
   }> {
     try {
-      const result = await db.query(`
+      const result = await rawQuery(`
         SELECT 
           (SELECT COUNT(*) FROM skipped_ledgers WHERE backfilled_at IS NULL) as backfill_queue,
           (SELECT COUNT(*) FROM skipped_ledgers WHERE reason = 'load_shedding') as skipped_events
@@ -336,7 +336,7 @@ export class GracefulDegradationService {
     previousLevel: LoadLevel,
   ): Promise<void> {
     try {
-      await db.query(
+      await rawQuery(
         `
         INSERT INTO degradation_events 
           (load_level, triggered_at, reason, created_at)

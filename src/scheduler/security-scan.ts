@@ -49,7 +49,8 @@ let running = false;
 let nextId = 1;
 
 export function registerAnalyzer(a: Analyzer): void {
-  if (analyzers.some((x) => x.name === a.name)) throw new Error(`Analyzer "${a.name}" already registered`);
+  if (analyzers.some((x) => x.name === a.name))
+    throw new Error(`Analyzer "${a.name}" already registered`);
   analyzers.push(a);
 }
 
@@ -58,7 +59,10 @@ export function setContractDiscovery(fn: () => Promise<string[]>): void {
 }
 
 export function fingerprint(contractId: string, analyzer: string, f: FindingInput): string {
-  return createHash('sha256').update([contractId, analyzer, f.severity, f.title].join('\0')).digest('hex').slice(0, 32);
+  return createHash('sha256')
+    .update([contractId, analyzer, f.severity, f.title].join('\0'))
+    .digest('hex')
+    .slice(0, 32);
 }
 
 export function diffFindings(prev: ScanFinding[], curr: ScanFinding[]): ScanDiff {
@@ -84,10 +88,19 @@ export async function runSecurityScan(): Promise<ScanRun | null> {
       for (const a of analyzers) {
         try {
           for (const f of await a.analyze(contractId)) {
-            findings.push({ ...f, contractId, analyzer: a.name, fingerprint: fingerprint(contractId, a.name, f) });
+            findings.push({
+              ...f,
+              contractId,
+              analyzer: a.name,
+              fingerprint: fingerprint(contractId, a.name, f),
+            });
           }
         } catch (err) {
-          analyzerErrors.push({ contractId, analyzer: a.name, error: err instanceof Error ? err.message : String(err) });
+          analyzerErrors.push({
+            contractId,
+            analyzer: a.name,
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       }
     }

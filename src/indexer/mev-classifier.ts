@@ -1,4 +1,5 @@
-import { MevType, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { MevType } from '../types/mev';
 import { prismaWrite, prismaRead } from '../db';
 
 export interface MevClassification {

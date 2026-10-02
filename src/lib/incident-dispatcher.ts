@@ -101,7 +101,7 @@ async function getContractTvlUsd(contractAddress: string): Promise<number> {
     }),
   ]);
   if (yield_?.tvl) {
-    const v = parseFloat(yield_.tvl);
+    const v = yield_.tvl;
     if (!isNaN(v) && v > 0) return v;
   }
   return portfolio?.valueUsd ?? 0;

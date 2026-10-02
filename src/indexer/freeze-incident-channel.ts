@@ -42,7 +42,10 @@ class FreezeIncidentChannel {
     this.events.setMaxListeners(0);
   }
 
-  publish(input: Omit<FreezeIncident, 'id' | 'detectedAt'>, now = Date.now()): FreezeIncident | null {
+  publish(
+    input: Omit<FreezeIncident, 'id' | 'detectedAt'>,
+    now = Date.now(),
+  ): FreezeIncident | null {
     for (const [hash, ts] of this.seen) if (now - ts > DEDUPE_TTL_MS) this.seen.delete(hash);
     if (this.seen.has(input.transactionHash)) return null;
     this.seen.set(input.transactionHash, now);

@@ -9,6 +9,7 @@
 import { Router, Request, Response } from 'express';
 import { requireRole } from '../auth/middleware';
 import { getScanRun, listScanRuns, runSecurityScan } from '../scheduler/security-scan';
+import { asyncHandler } from '../middleware/asyncHandler';
 
 export const securityScansRouter = Router();
 
@@ -32,11 +33,15 @@ securityScansRouter.get('/latest', (_req: Request, res: Response) => {
   res.json(run);
 });
 
-securityScansRouter.post('/run', requireRole('admin'), async (_req: Request, res: Response) => {
-  const run = await runSecurityScan();
-  if (!run) return res.status(409).json({ error: 'A scan is already running' });
-  res.status(201).json(run);
-});
+securityScansRouter.post(
+  '/run',
+  requireRole('admin'),
+  asyncHandler(async (_req: Request, res: Response) => {
+    const run = await runSecurityScan();
+    if (!run) return res.status(409).json({ error: 'A scan is already running' });
+    res.status(201).json(run);
+  }),
+);
 
 securityScansRouter.get('/:id', (req: Request, res: Response) => {
   const id = Number(req.params.id);

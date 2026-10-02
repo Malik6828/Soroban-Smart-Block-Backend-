@@ -212,7 +212,12 @@ eventSchemaRegistryRouter.post('/:event/compatibility', (req: Request, res: Resp
     return;
   }
   const latest = findVersion(event, 'latest');
-  const issues = latest ? checkBackwardCompatibility(latest.fields, parsed.data.fields) : [];
+  const issues = latest
+    ? checkBackwardCompatibility(
+        latest.fields,
+        parsed.data.fields as Parameters<typeof checkBackwardCompatibility>[1],
+      )
+    : [];
   res.json({ event, againstVersion: latest?.version ?? null, compatible: !issues.length, issues });
 });
 

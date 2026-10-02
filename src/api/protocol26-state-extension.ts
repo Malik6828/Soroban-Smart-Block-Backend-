@@ -299,7 +299,7 @@ protocol26Router.post(
             cpuInstructions: cpuInsns,
             memoryBytes: memBytes,
             transactionXdr: simulationResult.transactionData
-              ? simulationResult.transactionData.toXDR('base64')
+              ? simulationResult.transactionData.build().toXDR('base64')
               : null,
             result: simulationResult.result?.retval
               ? simulationResult.result.retval.toXDR('base64')

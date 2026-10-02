@@ -211,8 +211,8 @@ async function ensurePool(
     return {
       tokenA: existing.tokenA,
       tokenB: existing.tokenB,
-      reserveA: BigInt(existing.reserveA),
-      reserveB: BigInt(existing.reserveB),
+      reserveA: BigInt(existing.reserveA.toString()),
+      reserveB: BigInt(existing.reserveB.toString()),
       feeBps: existing.feeBps,
     };
   }
@@ -220,13 +220,15 @@ async function ensurePool(
 
   const [tokenA, tokenB] = canonicalPair(pair[0], pair[1]);
   const [metaA, metaB] = await Promise.all([
-    getTokenMetadata(tokenA).catch(() => null),
-    getTokenMetadata(tokenB).catch(() => null),
+    getTokenMetadata(tokenA).catch((): null => null),
+    getTokenMetadata(tokenB).catch((): null => null),
   ]);
 
   await prisma.dexPool.create({
     data: {
       poolAddress,
+      // `address` is the on-chain pool address (same value the API uses).
+      address: poolAddress,
       protocol,
       tokenA,
       tokenB,

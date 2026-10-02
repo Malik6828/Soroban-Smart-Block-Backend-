@@ -244,13 +244,13 @@ export function classifyWallet(
   // ── extract signer / guardian / session key details ────────────────────────
 
   const signerCount = hasMultiSig ? analysis.signerCount : null;
-  const threshold = null; // requires on-chain state query; set during enrichment
+  const threshold: number | null = null; // requires on-chain state query; set during enrichment
 
   // Auth addresses beyond the first are likely co-signers or guardians
   const extraAddresses = analysis.addresses.filter((a) => a !== sourceAccount);
   const guardians = hasSocialRecovery ? extraAddresses : [];
   const sessionKeys: SessionKeyInfo[] = hasSessionKey
-    ? extraAddresses.map((a) => ({ address: a, expiryLedger: null }))
+    ? extraAddresses.map((a) => ({ address: a, expiryLedger: null as number | null }))
     : [];
 
   const isSmartWallet = isContractSource || analysis.hasContractAuth || detectedMethods.length > 0;
@@ -349,7 +349,7 @@ export function extractSessionKeysFromAuth(
   if (!isContractAddress(sourceAccount)) return [];
   return authEntries
     .filter((e) => e.type === 'account' && e.address !== sourceAccount)
-    .map((e) => ({ address: e.address, expiryLedger: null }));
+    .map((e) => ({ address: e.address, expiryLedger: null as number | null }));
 }
 
 export interface AuthDecompositionRecord {

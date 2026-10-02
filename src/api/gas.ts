@@ -63,15 +63,18 @@ type GasAlertRow = {
 };
 
 const gasAnalyticsApi = {
-  async findMany(args: {
-    where?: Record<string, unknown>;
-    orderBy?: Record<string, 'asc' | 'desc'>;
-    take?: number;
-    select?: Record<string, boolean>;
-  } = {}) {
+  async findMany(
+    args: {
+      where?: Record<string, unknown>;
+      orderBy?: Record<string, 'asc' | 'desc'>;
+      take?: number;
+      select?: Record<string, boolean>;
+    } = {},
+  ) {
     const txWhere: Record<string, unknown> = {};
     const where = args.where ?? {};
-    const contractAddress = typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
+    const contractAddress =
+      typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
     const functionName = typeof where.functionName === 'string' ? where.functionName : undefined;
     const { gte, lte } = (where.ledgerCloseTime as { gte?: Date; lte?: Date }) ?? {};
 
@@ -136,9 +139,13 @@ const gasAnalyticsApi = {
 };
 
 const gasBenchmarkApi = {
-  async findFirst(args: { where?: Record<string, unknown>; orderBy?: Record<string, 'asc' | 'desc'> }) {
+  async findFirst(args: {
+    where?: Record<string, unknown>;
+    orderBy?: Record<string, 'asc' | 'desc'>;
+  }) {
     const where = args.where ?? {};
-    const contractAddress = typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
+    const contractAddress =
+      typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
     const functionName = typeof where.functionName === 'string' ? where.functionName : undefined;
 
     const rows = await prismaRead.contractBenchmarkSnapshot.findMany({
@@ -171,9 +178,14 @@ const gasBenchmarkApi = {
       memoryBytes: row.avgMemory ? Math.round(row.avgMemory) : 0,
     } satisfies GasBenchmarkRow;
   },
-  async findMany(args: { where?: Record<string, unknown>; orderBy?: Record<string, 'asc' | 'desc'>; take?: number }) {
+  async findMany(args: {
+    where?: Record<string, unknown>;
+    orderBy?: Record<string, 'asc' | 'desc'>;
+    take?: number;
+  }) {
     const where = args.where ?? {};
-    const contractAddress = typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
+    const contractAddress =
+      typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
     const functionName = typeof where.functionName === 'string' ? where.functionName : undefined;
 
     const rows = await prismaRead.contractBenchmarkSnapshot.findMany({
@@ -193,15 +205,18 @@ const gasBenchmarkApi = {
       },
     });
 
-    return rows.map((row) => ({
-      contractAddress: row.contractAddress,
-      functionName: row.functionName,
-      totalFee: String(row.avgFeeStroops ?? 0),
-      source: 'historical_best',
-      recordedAt: row.createdAt,
-      cpuInstructions: row.avgCpu ? Math.round(row.avgCpu) : 0,
-      memoryBytes: row.avgMemory ? Math.round(row.avgMemory) : 0,
-    } satisfies GasBenchmarkRow));
+    return rows.map(
+      (row) =>
+        ({
+          contractAddress: row.contractAddress,
+          functionName: row.functionName,
+          totalFee: String(row.avgFeeStroops ?? 0),
+          source: 'historical_best',
+          recordedAt: row.createdAt,
+          cpuInstructions: row.avgCpu ? Math.round(row.avgCpu) : 0,
+          memoryBytes: row.avgMemory ? Math.round(row.avgMemory) : 0,
+        }) satisfies GasBenchmarkRow,
+    );
   },
   async create(input: {
     contractAddress: string;
@@ -243,9 +258,14 @@ const gasBenchmarkApi = {
 };
 
 const gasAlertApi = {
-  async findMany(args: { where?: Record<string, unknown>; orderBy?: Record<string, 'asc' | 'desc'>; take?: number }) {
+  async findMany(args: {
+    where?: Record<string, unknown>;
+    orderBy?: Record<string, 'asc' | 'desc'>;
+    take?: number;
+  }) {
     const where = args.where ?? {};
-    const contractAddress = typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
+    const contractAddress =
+      typeof where.contractAddress === 'string' ? where.contractAddress : undefined;
     const alertType = typeof where.alertType === 'string' ? where.alertType : undefined;
     const severity = typeof where.severity === 'string' ? where.severity : undefined;
 
@@ -264,18 +284,21 @@ const gasAlertApi = {
       },
     });
 
-    return rows.map((row) => ({
-      contractAddress: row.contractAddress ?? '',
-      alertType: row.alertType,
-      severity: severity ?? 'medium',
-      metric: row.name ?? row.alertType,
-      currentValue: 0,
-      baselineValue: 0,
-      deviationPct: 0,
-      txHash: null,
-      message: row.name ?? row.alertType,
-      detectedAt: row.createdAt,
-    } satisfies GasAlertRow));
+    return rows.map(
+      (row) =>
+        ({
+          contractAddress: row.contractAddress ?? '',
+          alertType: row.alertType,
+          severity: severity ?? 'medium',
+          metric: row.name ?? row.alertType,
+          currentValue: 0,
+          baselineValue: 0,
+          deviationPct: 0,
+          txHash: null as string | null,
+          message: row.name ?? row.alertType,
+          detectedAt: row.createdAt,
+        }) satisfies GasAlertRow,
+    );
   },
   async create(input: {
     contractAddress: string;

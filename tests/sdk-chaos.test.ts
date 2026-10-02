@@ -4,7 +4,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { gracefulDegradation, fallbacks, type ComponentHandler, type GeneratedFile } from '../scripts/sdk/graceful-degradation';
+import {
+  gracefulDegradation,
+  fallbacks,
+  type ComponentHandler,
+} from '../scripts/sdk/graceful-degradation';
 import { featureFlags, FLAG_NAMES } from '../scripts/sdk/feature-flags';
 import { logger } from '../scripts/sdk/sdk-logger';
 import { metrics } from '../scripts/sdk/sdk-metrics';
@@ -43,7 +47,7 @@ describe('SDK Generation Chaos Tests', () => {
 
       const status = gracefulDegradation.getCircuitBreakerStatus();
       const componentStatus = status.get('failing-component');
-      
+
       expect(componentStatus?.open).toBe(true);
       expect(componentStatus?.count).toBeGreaterThanOrEqual(3);
     });
@@ -57,10 +61,10 @@ describe('SDK Generation Chaos Tests', () => {
         },
       };
 
-      const config = { 
-        maxRetries: 1, 
+      const config = {
+        maxRetries: 1,
         circuitBreakerThreshold: 2,
-        circuitBreakerTimeout: 100 // 100ms timeout for testing
+        circuitBreakerTimeout: 100, // 100ms timeout for testing
       };
       gracefulDegradation.configure(config);
 
@@ -69,13 +73,17 @@ describe('SDK Generation Chaos Tests', () => {
         await gracefulDegradation.executeWithDegradation([failingHandler]);
       }
 
-      expect(gracefulDegradation.getCircuitBreakerStatus().get('failing-component')?.open).toBe(true);
+      expect(gracefulDegradation.getCircuitBreakerStatus().get('failing-component')?.open).toBe(
+        true,
+      );
 
       // Wait for timeout
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       // Circuit breaker should be reset
-      expect(gracefulDegradation.getCircuitBreakerStatus().get('failing-component')).toBeUndefined();
+      expect(
+        gracefulDegradation.getCircuitBreakerStatus().get('failing-component'),
+      ).toBeUndefined();
     });
 
     it('should prevent execution when circuit breaker is open', async () => {
@@ -85,9 +93,9 @@ describe('SDK Generation Chaos Tests', () => {
         execute: () => [{ path: 'test.txt', content: 'test' }],
       };
 
-      const config = { 
-        maxRetries: 1, 
-        circuitBreakerThreshold: 2 
+      const config = {
+        maxRetries: 1,
+        circuitBreakerThreshold: 2,
       };
       gracefulDegradation.configure(config);
 
@@ -106,7 +114,7 @@ describe('SDK Generation Chaos Tests', () => {
 
       // Try to execute with same handler name
       const result = await gracefulDegradation.executeWithDegradation([handler]);
-      
+
       expect(result.success).toBe(true); // Optional handler should still succeed overall
       expect(result.failedComponents).toContain('circuit-breaker-test');
       expect(result.errors[0].error).toContain('Circuit breaker is open');
@@ -132,7 +140,7 @@ describe('SDK Generation Chaos Tests', () => {
       gracefulDegradation.configure(config);
 
       const result = await gracefulDegradation.executeWithDegradation([flakyHandler]);
-      
+
       expect(result.success).toBe(true);
       expect(result.generatedFiles).toHaveLength(1);
       expect(attemptCount).toBe(3); // Initial attempt + 2 retries
@@ -153,7 +161,7 @@ describe('SDK Generation Chaos Tests', () => {
       gracefulDegradation.configure(config);
 
       const result = await gracefulDegradation.executeWithDegradation([alwaysFailingHandler]);
-      
+
       expect(result.success).toBe(true); // Optional handler
       expect(result.failedComponents).toContain('always-failing');
       expect(attemptCount).toBe(4); // Initial attempt + 3 retries
@@ -172,7 +180,7 @@ describe('SDK Generation Chaos Tests', () => {
       };
 
       const result = await gracefulDegradation.executeWithDegradation([failingHandler]);
-      
+
       expect(result.success).toBe(true);
       expect(result.partial).toBe(true);
       expect(result.fallbacksActivated).toContain('with-fallback');
@@ -191,7 +199,7 @@ describe('SDK Generation Chaos Tests', () => {
       };
 
       const result = await gracefulDegradation.executeWithDegradation([criticalHandler]);
-      
+
       expect(result.success).toBe(false);
       expect(result.fallbacksActivated).not.toContain('critical-with-fallback');
       expect(result.generatedFiles).toHaveLength(0);
@@ -210,10 +218,10 @@ describe('SDK Generation Chaos Tests', () => {
       };
 
       const result = await gracefulDegradation.executeWithDegradation([handlerWithBadFallback]);
-      
+
       expect(result.success).toBe(true); // Optional handler
       expect(result.failedComponents).toContain('bad-fallback');
-      expect(result.errors.some(e => e.component === 'bad-fallback-fallback')).toBe(true);
+      expect(result.errors.some((e) => e.component === 'bad-fallback-fallback')).toBe(true);
     });
   });
 
@@ -237,7 +245,7 @@ describe('SDK Generation Chaos Tests', () => {
         criticalHandler,
         optionalHandler,
       ]);
-      
+
       expect(result.success).toBe(false);
       expect(result.failedComponents).toContain('critical');
       expect(result.generatedFiles).toHaveLength(0); // Optional handler should not run
@@ -260,7 +268,7 @@ describe('SDK Generation Chaos Tests', () => {
         criticalHandler,
         optionalHandler,
       ]);
-      
+
       expect(result.success).toBe(true);
       expect(result.generatedFiles).toHaveLength(2);
     });
@@ -284,7 +292,7 @@ describe('SDK Generation Chaos Tests', () => {
         criticalHandler,
         failingOptional,
       ]);
-      
+
       expect(result.success).toBe(true);
       expect(result.partial).toBe(true);
       expect(result.generatedFiles).toHaveLength(1);
@@ -339,7 +347,7 @@ describe('SDK Generation Chaos Tests', () => {
     it('should generate metrics summary', () => {
       metrics.incrementCounter('test_counter', 5);
       metrics.recordHistogram('test_histogram', 1.5);
-      
+
       const summary = metrics.getSummary();
       expect(summary).toContain('test_counter');
       expect(summary).toContain('test_histogram');
@@ -400,7 +408,7 @@ describe('SDK Generation Chaos Tests', () => {
       ];
 
       const result = await gracefulDegradation.executeWithDegradation(handlers);
-      
+
       expect(result.success).toBe(true);
       expect(result.partial).toBe(true);
       expect(result.generatedFiles).toHaveLength(3); // 2 critical + 1 fallback
@@ -426,7 +434,7 @@ describe('SDK Generation Chaos Tests', () => {
       gracefulDegradation.configure(config);
 
       const result = await gracefulDegradation.executeWithDegradation([flakyHandler]);
-      
+
       expect(result.success).toBe(true);
       expect(result.generatedFiles).toHaveLength(1);
       expect(attemptCount).toBe(3);

@@ -200,7 +200,7 @@ async function runVerification(
     extractedDir = await extractArchive(archivePath, mimeType);
 
     // Capture source files before compilation (they get cleaned up after)
-    const sourceFiles = await extractSourceFiles(extractedDir).catch(() => []);
+    const sourceFiles = await extractSourceFiles(extractedDir).catch((): never[] => []);
     if (sourceFiles.length > 0) {
       await prisma.verificationJob.update({
         where: { id: jobId },
@@ -213,7 +213,7 @@ async function runVerification(
     // Optionally fetch on-chain Wasm hash via RPC
     let onChainWasmHash: string | null = null;
     if (contractAddress) {
-      onChainWasmHash = await fetchOnChainHash(contractAddress).catch(() => null);
+      onChainWasmHash = await fetchOnChainHash(contractAddress).catch((): null => null);
     }
 
     const matched = onChainWasmHash != null ? wasmHash === onChainWasmHash : null;

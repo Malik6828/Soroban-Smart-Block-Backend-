@@ -202,7 +202,11 @@ queryTemplateGalleryRouter.post('/', (req: Request, res: Response) => {
   const now = new Date().toISOString();
   const t: QueryTemplate = {
     id: randomUUID(),
-    ...parsed.data,
+    title: parsed.data.title,
+    description: parsed.data.description,
+    sql: parsed.data.sql,
+    tags: parsed.data.tags,
+    params: parsed.data.params,
     authorId: author,
     stars: 0,
     forks: 0,

@@ -43,7 +43,12 @@ export function getBoundaryValues(type: string): unknown[] {
 export async function buildCorpusFromHistory(contractAddress: string): Promise<TypedCorpus> {
   const txs = await prismaRead.transaction.findMany({
     where: { contractAddress, functionArgs: { not: undefined } },
-    select: { functionName: true, functionArgs: true, ledger: true, hash: true },
+    select: {
+      functionName: true,
+      functionArgs: true,
+      ledgerSequence: true,
+      hash: true,
+    },
     orderBy: { ledger: 'desc' },
     take: 200,
   });
@@ -56,7 +61,7 @@ export async function buildCorpusFromHistory(contractAddress: string): Promise<T
     const entry: CorpusEntry = {
       functionName: tx.functionName,
       args,
-      ledger: tx.ledger,
+      ledger: tx.ledgerSequence,
       txHash: tx.hash,
     };
     if (!byFunction.has(tx.functionName)) byFunction.set(tx.functionName, []);

@@ -197,7 +197,7 @@ export async function fireAlertsForPause(
         severity,
         message: `Contract ${contractAddress} has been paused. Severity: ${severity}. ${reason ? `Reason: ${reason}` : ''}`,
         timestamp: now.toISOString(),
-      }).catch(() => null);
+      }).catch((): null => null);
     }
 
     await prismaWrite.alertConfiguration.update({

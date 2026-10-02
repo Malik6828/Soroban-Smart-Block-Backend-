@@ -11,9 +11,21 @@ import { requireRole } from '../auth/middleware';
 export const contractLicensesRouter = Router();
 
 export const SPDX_LICENSES = [
-  'MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'GPL-2.0-only', 'GPL-3.0-only',
-  'LGPL-3.0-only', 'AGPL-3.0-only', 'MPL-2.0', 'ISC', 'Unlicense', 'CC0-1.0',
-  'BUSL-1.1', 'PROPRIETARY', 'UNLICENSED',
+  'MIT',
+  'Apache-2.0',
+  'BSD-2-Clause',
+  'BSD-3-Clause',
+  'GPL-2.0-only',
+  'GPL-3.0-only',
+  'LGPL-3.0-only',
+  'AGPL-3.0-only',
+  'MPL-2.0',
+  'ISC',
+  'Unlicense',
+  'CC0-1.0',
+  'BUSL-1.1',
+  'PROPRIETARY',
+  'UNLICENSED',
 ] as const;
 
 export interface LicenseRecord {
@@ -94,21 +106,30 @@ contractLicensesRouter.get('/:contractId', (req: Request, res: Response) => {
  *       200:
  *         description: Stored record
  */
-contractLicensesRouter.put('/:contractId', requireRole('developer'), (req: Request, res: Response) => {
-  const id = contractIdSchema.safeParse(req.params.contractId);
-  const body = bodySchema.safeParse(req.body);
-  if (!id.success || !body.success) {
-    return res.status(400).json({
-      error: 'Invalid request',
-      details: [...(id.success ? [] : id.error.issues), ...(body.success ? [] : body.error.issues)],
-    });
-  }
-  const record: LicenseRecord = {
-    contractId: id.data,
-    ...body.data,
-    registeredBy: req.user?.address,
-    updatedAt: new Date().toISOString(),
-  };
-  store.set(id.data, record);
-  res.json(record);
-});
+contractLicensesRouter.put(
+  '/:contractId',
+  requireRole('developer'),
+  (req: Request, res: Response) => {
+    const id = contractIdSchema.safeParse(req.params.contractId);
+    const body = bodySchema.safeParse(req.body);
+    if (!id.success || !body.success) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        details: [
+          ...(id.success ? [] : id.error.issues),
+          ...(body.success ? [] : body.error.issues),
+        ],
+      });
+    }
+    const record: LicenseRecord = {
+      contractId: id.data,
+      license: body.data.license,
+      attribution: body.data.attribution,
+      sourceUrl: body.data.sourceUrl,
+      registeredBy: req.user?.address,
+      updatedAt: new Date().toISOString(),
+    };
+    store.set(id.data, record);
+    res.json(record);
+  },
+);

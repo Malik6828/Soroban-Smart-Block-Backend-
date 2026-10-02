@@ -24,7 +24,7 @@ model Ledger {
 }
 
 model WasmUpgradeHistory {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address")
   previousHash String? @map("previous_hash")
   newHash String @map("new_hash")
@@ -59,7 +59,7 @@ model WasmUpgradeHistory {
 }
 
 model Transaction {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   hash String @map("hash") @unique
   ledgerSequence Int @map("ledger_sequence")
   ledgerCloseTime DateTime @map("ledger_close_time")
@@ -391,6 +391,7 @@ model SessionAuthorization {
 model DexPool {
   id String @map("id") @id @default(cuid())
   poolAddress String @map("pool_address") @unique @default("")
+  address      String   @map("address") @unique
   chain String @map("chain") @default("stellar")
   protocol String @map("protocol") @default("")
   poolType String @map("pool_type") @default("constant_product") // "constant_product" | "stable" | "concentrated"
@@ -407,6 +408,8 @@ model DexPool {
   totalLiquidity Decimal? @map("total_liquidity") @db.Decimal(30, 7)
   /// Whether this pool is actively monitored
   isActive Boolean @map("is_active") @default(true)
+  firstSeenLedger Int    @map("first_seen_ledger") @default(0)
+  lastEventLedger Int    @map("last_event_ledger") @default(0)
 
   // Token A
   tokenA String @map("token_a") @default("")
@@ -720,7 +723,7 @@ model ApiKey {
 }
 
 model SmartWallet {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   address String @map("address") @unique
   walletType String @map("wallet_type")
   signerCount Int? @map("signer_count")
@@ -767,7 +770,7 @@ model SponsoredTransaction {
 }
 
 model AuthDecomposition {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   transactionHash String @map("transaction_hash") @unique
   walletAddress String? @map("wallet_address")
   authTree Json @map("auth_tree")
@@ -789,7 +792,7 @@ model AuthDecomposition {
 // ---------------------------------------------------------------------------
 
 model SanctionsList {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   source String @map("source") // "ofac_sdn" | "ofac_cap" | "eu" | "un" | "uk_ofsi" | "custom"
   sourceUrl String? @map("source_url")
   listVersion String @map("list_version") // version/date of the list
@@ -901,7 +904,7 @@ model ContractResourceMetric {
 }
 
 model TranslationKey {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   key String @map("key") @unique
   defaultText String @map("default_text")
   context String? @map("context")
@@ -915,7 +918,7 @@ model TranslationKey {
 }
 
 model Translation {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   keyId String @map("key_id")
   language String @map("language")
   translatedText String @map("translated_text")
@@ -933,7 +936,7 @@ model Translation {
 }
 
 model FeedChannel {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   name String @map("name") @unique
   description String? @map("description")
   category String? @map("category")
@@ -961,7 +964,7 @@ model FeedMessage {
 }
 
 model FeedSubscription {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   channelName String @map("channel_name")
   deliveryType String @map("delivery_type")
   deliveryConfig Json? @map("delivery_config")
@@ -1059,7 +1062,7 @@ model RecoveryAnalysis {
 }
 
 model AlertConfiguration {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   userId String @map("user_id")
   contractAddress String? @map("contract_address") @db.VarChar(56)
   name String? @map("name") @db.VarChar(255)
@@ -1371,7 +1374,7 @@ model StellarNetworkHealth {
 // =========================================================================
 
 model ComposedTransaction {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   txHash String @map("tx_hash") @unique
   ledgerSeq Int @map("ledger_seq")
   timestamp DateTime @map("timestamp")
@@ -1392,7 +1395,7 @@ model ComposedTransaction {
 }
 
 model CompositionPattern {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   name String @map("name") @unique
   description String @map("description")
   category String @map("category")
@@ -1413,7 +1416,7 @@ model CompositionPattern {
 }
 
 model CompositionPatternInstance {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   txId String @map("tx_id")
   patternId String @map("pattern_id")
   confidence Float @map("confidence")
@@ -1429,7 +1432,7 @@ model CompositionPatternInstance {
 }
 
 model ContractComposability {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractId String @map("contract_id")
   contractAddress String @map("contract_address") @unique
   composedWith Json? @map("composed_with")
@@ -1449,7 +1452,7 @@ model ContractComposability {
 }
 
 model CompositionAlert {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   txHash String? @map("tx_hash")
   contractAddress String? @map("contract_address")
   patternId String? @map("pattern_id")
@@ -1472,7 +1475,7 @@ model CompositionAlert {
 }
 
 model ComposabilityStaticAnalysis {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address") @unique
   externalCalls Json? @map("external_calls")
   callGraph Json? @map("call_graph")
@@ -1487,7 +1490,7 @@ model ComposabilityStaticAnalysis {
 }
 
 model ComposabilityVerification {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   txHash String @map("tx_hash") @unique
   atomicity Boolean @map("atomicity") @default(false)
   authorization Boolean @map("authorization") @default(false)
@@ -1510,7 +1513,7 @@ model ComposabilityVerification {
 }
 
 model ComposabilityFuzzCampaign {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address")
   status String @map("status") @default("running")
   totalCases Int @map("total_cases") @default(0)
@@ -1529,7 +1532,7 @@ model ComposabilityFuzzCampaign {
 }
 
 model ComposabilityExploit {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   title String @map("title")
   description String @map("description")
   patternCategory String @map("pattern_category")
@@ -1548,7 +1551,7 @@ model ComposabilityExploit {
 }
 
 model EcosystemComposabilityIndex {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   score Float @map("score")
   compositionDiversity Int @map("composition_diversity") @default(0)
   avgSafetyScore Float @map("avg_safety_score") @default(0)
@@ -1567,7 +1570,7 @@ model EcosystemComposabilityIndex {
 // =========================================================================
 
 model MevVictim {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   address String @map("address") @unique
   totalLossUsd Float @map("total_loss_usd") @default(0)
   incidentCount Int @map("incident_count") @default(0)
@@ -1584,7 +1587,7 @@ model MevVictim {
 }
 
 model MevAttacker {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   address String @map("address") @unique
   totalProfitUsd Float @map("total_profit_usd") @default(0)
   attackCount Int @map("attack_count") @default(0)
@@ -1597,6 +1600,7 @@ model MevAttacker {
   updatedAt DateTime @map("updated_at") @updatedAt
 
   mevEvents MevEvent[]
+  events       MevEvent[] @relation("MevAttackerEvents")
 
   @@index([address])
   @@index([totalProfitUsd])
@@ -1604,13 +1608,15 @@ model MevAttacker {
 }
 
 model MevEvent {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   txHash String @map("tx_hash") @unique
   ledgerSeq Int @map("ledger_seq")
   timestamp DateTime @map("timestamp")
   mevType String @map("mev_type")
   victimAddress String? @map("victim_address")
   attackerAddress String? @map("attacker_address")
+  mevAttackerId String?  @map("mev_attacker_id")
+  mevAttacker   MevAttacker? @relation("MevAttackerEvents", fields: [mevAttackerId], references: [id], onDelete: SetNull)
   protocolAddress String? @map("protocol_address")
   tokenIn String? @map("token_in")
   tokenOut String? @map("token_out")
@@ -1639,7 +1645,7 @@ model MevEvent {
 }
 
 model ProtocolMevResistance {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address") @unique
   contractName String? @map("contract_name")
   score Float @map("score") @default(50)
@@ -1662,7 +1668,7 @@ model ProtocolMevResistance {
 }
 
 model MevAlert {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   alertType String @map("alert_type")
   severity String @map("severity")
   txHash String? @map("tx_hash")
@@ -1689,7 +1695,7 @@ model MevAlert {
 // =========================================================================
 
 model BillingPlan {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   name String @map("name") @unique
   requestsPerDay Int @map("requests_per_day")
   requestsPerMonth Int @map("requests_per_month")
@@ -1703,7 +1709,7 @@ model BillingPlan {
 }
 
 model Developer {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   email String @map("email") @unique
   name String? @map("name")
   passwordHash String? @map("password_hash")
@@ -1730,7 +1736,7 @@ model Developer {
 }
 
 model DevApiKey {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   developerId String @map("developer_id")
   keyPrefix String @map("key_prefix")
   keyHash String @map("key_hash")
@@ -1790,7 +1796,7 @@ model KeyRotationAudit {
 }
 
 model DevWebhook {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   developerId String @map("developer_id")
   url String @map("url")
   secret String @map("secret")
@@ -1813,7 +1819,7 @@ model DevWebhook {
 }
 
 model DevWebhookDelivery {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   webhookId String @map("webhook_id")
   eventType String @map("event_type")
   payload Json @map("payload")
@@ -1835,7 +1841,7 @@ model DevWebhookDelivery {
 }
 
 model UsageRecord {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   developerId String @map("developer_id")
   apiKeyId String? @map("api_key_id")
   endpoint String @map("endpoint")
@@ -1860,7 +1866,7 @@ model UsageRecord {
 // =========================================================================
 
 model ScheduledOperation {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address")
   timerType String @map("timer_type")
   status String @map("status")
@@ -1890,7 +1896,7 @@ model ScheduledOperation {
 }
 
 model VestingSchedule {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address")
   tokenAddress String @map("token_address")
   tokenSymbol String? @map("token_symbol")
@@ -1920,7 +1926,7 @@ model VestingSchedule {
 }
 
 model GovernanceTimelock {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address")
   proposalId String? @map("proposal_id")
   title String? @map("title")
@@ -1948,7 +1954,7 @@ model GovernanceTimelock {
 }
 
 model CronJob {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address")
   cronExpression String @map("cron_expression")
   functionName String @map("function_name")
@@ -1972,7 +1978,7 @@ model CronJob {
 }
 
 model CronExecution {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   cronJobId String @map("cron_job_id")
   executedAt DateTime @map("executed_at")
   success Boolean @map("success")
@@ -1988,7 +1994,7 @@ model CronExecution {
 }
 
 model TimerAlert {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   scheduledOpId String? @map("scheduled_op_id")
   alertType String @map("alert_type")
   severity String @map("severity")
@@ -2047,6 +2053,7 @@ model ArbitrageOpportunity {
   sellPrice Decimal @map("sell_price") @db.Decimal(30, 18)
   profitPercentage Decimal @map("profit_percentage") @db.Decimal(10, 4)
   profitEstimate Decimal? @map("profit_estimate") @db.Decimal(30, 0)
+  estProfitUsd Float?   @map("est_profit_usd")
   capitalRequired Decimal? @map("capital_required") @db.Decimal(30, 0)
   confidence Decimal? @map("confidence") @db.Decimal(5, 4)
   route Json @map("route")
@@ -2055,6 +2062,7 @@ model ArbitrageOpportunity {
   expiredAt DateTime? @map("expired_at")
   executedAt DateTime? @map("executed_at")
   executionTxHash String? @map("execution_tx_hash") @db.VarChar(64)
+  closedAt     DateTime? @map("closed_at")
   createdAt DateTime @map("created_at") @default(now())
 
   buyPool    DexPool?             @relation(fields: [buyPoolId], references: [id], onDelete: Cascade, onUpdate: Cascade, name: "buyPool")
@@ -2250,7 +2258,7 @@ model FeeEvent {
 /// Aggregated protocol revenue for a contract over a calendar bucket.
 /// Written by fee-aggregator on HOUR / DAY / WEEK / MONTH schedules.
 model ProtocolRevenue {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address") @db.VarChar(56)
   protocolName String? @map("protocol_name") @db.VarChar(120)
   /// Aggregation period: HOUR | DAY | WEEK | MONTH
@@ -2316,10 +2324,18 @@ model ProtocolProfile {
   id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address") @unique @db.VarChar(56)
   protocolName String @map("protocol_name") @db.VarChar(120)
+  category     String?  @map("category")
+  avgFeePercent Float?  @map("avg_fee_percent")
+  feeStructure Json?    @map("fee_structure")
+  logoUrl      String?  @map("logo_url")
+  website      String?  @map("website")
+  twitter      String?  @map("twitter")
+  discord      String?  @map("discord")
   /// Current TVL estimate (USD). Updated by the fee aggregator.
   tvl Decimal? @map("tvl") @db.Decimal(30, 7)
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
+  lastUpdatedAt DateTime? @map("last_updated_at")
 
   @@index([protocolName])
   @@map("_protocol_profiles")
@@ -2337,6 +2353,7 @@ model RevenueAlert {
   message String @map("message")
   metadata Json? @map("metadata")
   detectedAt DateTime @map("detected_at") @default(now())
+  acknowledged Boolean  @map("acknowledged") @default(false)
 
   @@index([contractAddress, detectedAt])
   @@index([severity])
@@ -2349,7 +2366,7 @@ model RevenueAlert {
 // =========================================================================
 
 model ProtocolEconomicsSnapshot {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   bucket String @map("bucket")
   bucketStart DateTime @map("bucket_start")
   bucketEnd DateTime @map("bucket_end")
@@ -2373,7 +2390,7 @@ model ProtocolEconomicsSnapshot {
 // =========================================================================
 
 model FeatureDefinition {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   name String @map("name") @unique
   description String? @map("description")
   category String? @map("category")
@@ -2388,7 +2405,7 @@ model FeatureDefinition {
 }
 
 model FeatureValue {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   featureId String @map("feature_id")
   value Float @map("value")
   timestamp DateTime @map("timestamp")
@@ -2481,7 +2498,7 @@ model Attestation {
 }
 
 model AuditLog {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   actor String @map("actor")
   action String @map("action")
   target String @map("target")
@@ -2554,7 +2571,7 @@ model Bn254GasExemption {
 
 model CommodityDualSignerLog {
   id String @map("id") @id @default(cuid())
-  transactionHash String @map("transaction_hash")
+  transactionHash String @map("transaction_hash") @unique
   commodityType String @map("commodity_type")
   commodityCode String @map("commodity_code")
   contractAddress String @map("contract_address")
@@ -2609,6 +2626,14 @@ model ContractFactory {
 model ContractTemplate {
   id String @map("id") @id @default(cuid())
   name String? @map("name")
+  description String? @map("description")
+  category String? @map("category")
+  wasmBase64 String? @map("wasm_base64")
+  abi Json? @map("abi")
+  defaultArgs Json? @map("default_args")
+  deploymentGuide String? @map("deployment_guide")
+  version String? @map("version")
+  author String? @map("author")
   createdAt DateTime @map("created_at") @default(now())
   @@map("_contract_templates")
 }
@@ -2635,7 +2660,7 @@ model DerivedMetric {
 
 model DtccSettlementBridge {
   id String @map("id") @id @default(cuid())
-  transactionHash String @map("transaction_hash")
+  transactionHash String @map("transaction_hash") @unique
   dtccSettlementId String @map("dtcc_settlement_id")
   securityId String @map("security_id")
   securityType String @map("security_type")
@@ -2742,6 +2767,8 @@ model FuzzRun {
   totalCases Int @map("total_cases")
   unsafeFound Int @map("unsafe_found")
   coveragePct Float? @map("coverage_pct")
+  strategies Json? @map("strategies")
+  totalIterations Int @map("total_iterations") @default(0)
   startedAt DateTime? @map("started_at")
   completedAt DateTime? @map("completed_at")
   createdAt DateTime @map("created_at") @default(now())
@@ -2750,7 +2777,7 @@ model FuzzRun {
 }
 
 model GasAnalyticsSnapshot {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   bucket String @map("bucket")
   bucketStart DateTime @map("bucket_start")
   bucketEnd DateTime @map("bucket_end")
@@ -2768,7 +2795,7 @@ model GasAnalyticsSnapshot {
 
 model GasGolfingTip {
   id String @map("id") @id @default(cuid())
-  functionName String @map("function_name")
+  functionName String @map("function_name") @unique
   tips Json? @map("tips")
   createdAt DateTime @map("created_at") @default(now())
   @@map("_gas_golfing_tips")
@@ -2784,7 +2811,7 @@ model GasGolfingTip {
 // values (i128-safe), matching the indexer's addIntegerStrings arithmetic.
 
 model GovernanceContract {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address") @unique
   governanceType String @map("governance_type")
   votingToken String? @map("voting_token")
@@ -2891,7 +2918,7 @@ model GovernanceMultisigSigner {
 }
 
 model GovernanceProposal {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address")
   proposalId String @map("proposal_id") // on-chain proposal id (natural key with contractAddress)
   proposer String @map("proposer")
@@ -2929,7 +2956,7 @@ model GovernanceProposal {
 }
 
 model GovernanceVote {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address")
   proposalId String @map("proposal_id") // on-chain proposal id (FK to proposal's natural key)
   voter String @map("voter")
@@ -3026,6 +3053,7 @@ model TreasuryTransaction {
   assetCode String @map("asset_code")
   tokenAddress String? @map("token_address")
   amount String @map("amount") // integer string in base units
+  amountNumeric Decimal  @map("amount_numeric") @default(0)
   counterparty String? @map("counterparty")
   category String? @map("category") // grants | ops | protocol_revenue | ...
   transactionHash String @map("transaction_hash")
@@ -3047,6 +3075,8 @@ model LinkedIdentity {
   chainId String @map("chain_id")
   address String @map("address")
   verified Boolean @map("verified")
+  message      String?  @map("message")
+  signature    String?  @map("signature")
   metadata Json? @map("metadata")
   lastVerified DateTime? @map("last_verified")
   createdAt DateTime @map("created_at") @default(now())
@@ -3112,6 +3142,10 @@ model NetworkNode {
   uptime30d Float? @map("uptime30d")
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
+
+  events  NetworkNodeEvent[]
+  metrics NetworkNodeMetric[]
+
   @@map("_network_nodes")
 }
 
@@ -3151,16 +3185,21 @@ model PoolSnapshot {
   priceAUsd Float? @map("price_a_usd")
   priceBUsd Float? @map("price_b_usd")
   createdAt DateTime @map("created_at") @default(now())
+  snapshotAt   DateTime @map("snapshot_at") @default(now())
   @@map("_pool_snapshots")
 }
 
 model PoolSwap {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   poolAddress String @map("pool_address")
   tokenIn String @map("token_in")
+  tokenOut String? @map("token_out")
+  amountOut String? @map("amount_out")
+  trader String? @map("trader")
   amountIn String? @map("amount_in")
   transactionHash String? @map("transaction_hash")
   ledgerCloseTime DateTime @map("ledger_close_time")
+  ledgerSequence Int    @map("ledger_sequence") @default(0)
   createdAt DateTime @map("created_at") @default(now())
   @@map("_pool_swaps")
 }
@@ -3302,17 +3341,21 @@ model PrivacyTransaction {
 }
 
 model ReentrancyAlert {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   transactionHash String @map("transaction_hash") @unique
   contractAddress String @map("contract_address")
   severity String? @map("severity")
   repeatedWithdrawCalls Int? @map("repeated_withdraw_calls")
+  maxCallDepth   Int?    @map("max_call_depth")
+  cyclicCallPairs Json? @map("cyclic_call_pairs")
+  signals Json? @map("signals")
+  ledgerSequence Int     @map("ledger_sequence") @default(0)
   createdAt DateTime @map("created_at") @default(now())
   @@map("_reentrancy_alerts")
 }
 
 model RegisteredDapp {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   name String @map("name")
   apiKey String @map("api_key")
   createdAt DateTime @map("created_at") @default(now())
@@ -3336,7 +3379,7 @@ model ReputationBadge {
 
 model ReputationDelegation {
   id String @map("id") @id @default(cuid())
-  delegator String @map("delegator")
+  delegator String @map("delegator") @unique
   delegatee String @map("delegatee")
   amount String? @map("amount")
   createdAt DateTime @map("created_at") @default(now())
@@ -3380,6 +3423,7 @@ model ReputationGovernanceVote {
   proposalId String @map("proposal_id")
   voter String @map("voter")
   vote String? @map("vote")
+  support      String?  @map("support")
   weight Float? @map("weight")
   reason String? @map("reason")
   createdAt DateTime @map("created_at") @default(now())
@@ -3402,6 +3446,7 @@ model ReputationProfile {
   id String @map("id") @id @default(cuid())
   address String @map("address") @unique
   chain String? @map("chain")
+  domain       String?  @map("domain")
   combinedScore Float? @map("combined_score")
   sorobanScore Float? @map("soroban_score")
   stellarScore Float? @map("stellar_score")
@@ -3451,6 +3496,8 @@ model ReputationSignal {
   weight Float? @map("weight")
   normalizedScore Float? @map("normalized_score")
   chain String? @map("chain")
+  source       String?  @map("source")
+  verified     Boolean  @map("verified") @default(false)
   metadata Json? @map("metadata")
   createdAt DateTime @map("created_at") @default(now())
 
@@ -3481,6 +3528,9 @@ model SandboxAccount {
   address String @map("address")
   publicKey String? @map("public_key")
   balance String? @map("balance")
+  label String? @map("label")
+  sequenceNumber Int @map("sequence_number") @default(0)
+  isPreFunded Boolean @map("is_pre_funded") @default(false)
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
 
@@ -3497,6 +3547,7 @@ model SandboxAccount {
 model SandboxCall {
   id String @map("id") @id @default(cuid())
   sessionId String @map("session_id")
+  sourceAccount  String?   @map("source_account")
   contractAddress String @map("contract_address")
   contractId String? @map("contract_id")
   functionName String @map("function_name")
@@ -3518,7 +3569,10 @@ model SandboxCiRun {
   passed Int? @map("passed")
   failed Int? @map("failed")
   totalTests Int? @map("total_tests")
-  logs String? @map("logs")
+  steps Json? @map("steps")
+  logs Json? @map("logs")
+  result Json? @map("result")
+  completedAt DateTime? @map("completed_at")
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
   @@map("_sandbox_ci_runs")
@@ -3530,6 +3584,13 @@ model SandboxContract {
   address String @map("address")
   contractId String? @map("contract_id")
   name String? @map("name")
+  wasmHash String? @map("wasm_hash")
+  lastCalledAt DateTime? @map("last_called_at")
+  deployerAccount String? @map("deployer_account")
+  sourceContract String? @map("source_contract")
+  templateId String? @map("template_id")
+  totalCalls Int @map("total_calls") @default(0)
+  deployedAt DateTime? @map("deployed_at")
   state Json? @map("state")
   abi Json? @map("abi")
   source String? @map("source")
@@ -3549,6 +3610,9 @@ model SandboxSession {
   expiresAt DateTime? @map("expires_at")
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
+  ledgerSequence Int? @map("ledger_sequence")
+  ledgerTimestamp DateTime? @map("ledger_timestamp")
+  networkPassphrase String? @map("network_passphrase")
 
   @@index([userId])
   @@map("_sandbox_sessions")
@@ -3561,6 +3625,7 @@ model SandboxShare {
   viewOnly Boolean? @map("view_only")
   expiresAt DateTime? @map("expires_at")
   createdAt DateTime @map("created_at") @default(now())
+  snapshotState  Json?     @map("snapshot_state")
   @@map("_sandbox_shares")
 }
 
@@ -3583,7 +3648,10 @@ model SettlementBatchSummary {
   totalAmount String? @map("total_amount")
   batchId String @map("batch_id")
   windowKey String? @map("window_key")
+  windowEnd DateTime? @map("window_end")
+  updatedAt DateTime @map("updated_at") @updatedAt
   eventCount Int? @map("event_count")
+  uniqueParties Int?    @map("unique_parties")
   compacted Boolean? @map("compacted")
   createdAt DateTime @map("created_at") @default(now())
 
@@ -3606,7 +3674,7 @@ model ShieldedTransfer {
 }
 
 model SignatureInspection {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   transactionHash String @map("transaction_hash") @unique
   ledgerSequence Int @map("ledger_sequence")
   curveType String? @map("curve_type")
@@ -3653,7 +3721,7 @@ model StateContention {
 }
 
 model ThreatAdvisory {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   title String @map("title")
   description String? @map("description")
   severity String @map("severity")
@@ -3670,6 +3738,7 @@ model ThreatAdvisory {
   externalUrl String? @map("external_url")
   createdAt DateTime @map("created_at") @default(now())
   updatedAt DateTime @map("updated_at") @updatedAt
+  resolvedAt   DateTime? @map("resolved_at")
   @@map("_threat_advisories")
 }
 
@@ -3694,7 +3763,7 @@ model ThreatReview {
 }
 
 model TipSubscription {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   channel String @map("channel")
   target String @map("target")
   active Boolean @map("active")
@@ -3707,8 +3776,8 @@ model TipSubscription {
 }
 
 model TipWebhook {
-  id String @map("id") @id
-  url String @map("url")
+  id String @map("id") @id @default(cuid())
+  url String @map("url") @unique
   events Json? @map("events")
   secret String? @map("secret")
   active Boolean @map("active")
@@ -3771,7 +3840,7 @@ model TokenPrice {
 }
 
 model TokenPriceHistory {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   tokenAddress String @map("token_address")
   priceUsd Decimal @map("price_usd")
   priceXlm Decimal @map("price_xlm")
@@ -3837,7 +3906,7 @@ model VerifiableCredential {
   id String @map("id") @id @default(cuid())
   profileId String @map("profile_id")
   // Unique credential identifier (W3C format or DID URI). Required and unique per credential instance.
-  credentialId String @map("credential_id")
+  credentialId String @map("credential_id") @unique
   context String? @map("context")
   type String? @map("type")
   issuer String? @map("issuer")
@@ -3875,7 +3944,7 @@ model VolumeAlert {
 }
 
 model VulnerabilitySource {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   name String @map("name") @unique
   sourceType String @map("source_type")
   feedUrl String? @map("feed_url")
@@ -3887,7 +3956,7 @@ model VulnerabilitySource {
 }
 
 model WebhookDelivery {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   subscriptionId String @map("subscription_id")
   eventId String? @map("event_id")
   batchPayload Json? @map("batch_payload")
@@ -3915,7 +3984,7 @@ model WebhookDelivery {
 }
 
 model WebhookSubscription {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   apiKeyId String @map("api_key_id")
   url String @map("url")
   secret String @map("secret")
@@ -4546,7 +4615,7 @@ model ArchivalAppeal {
 // =========================================================================
 
 model NftCollection {
-  id String @map("id") @id
+  id String @map("id") @id @default(cuid())
   contractAddress String @map("contract_address") @unique
   name String? @map("name")
   symbol String? @map("symbol")
@@ -5681,115 +5750,4 @@ model PermissionCache {
   @@index([apiKeyId, tenantId])
   @@index([expiresAt])
   @@map("permission_cache")
-}
-
-// ── Cross-chain identity graph ────────────────────────────────────────────────
-
-model IdentityGraph {
-  id          String   @id @default(cuid()) @map("id")
-  ownerId     String?  @map("owner_id")
-  displayName String?  @map("display_name") @db.VarChar(200)
-  avatarUrl   String?  @map("avatar_url")
-  metadata    Json     @map("metadata") @default("{}")
-  createdAt   DateTime @map("created_at") @default(now())
-  updatedAt   DateTime @map("updated_at") @updatedAt
-
-  addresses ChainAddress[]
-  linksOut  IdentityLink[] @relation("IdentityLinkSource")
-  linksIn   IdentityLink[] @relation("IdentityLinkTarget")
-
-  @@index([ownerId])
-  @@map("identity_graphs")
-}
-
-model ChainAddress {
-  id         String   @id @default(cuid()) @map("id")
-  identityId String   @map("identity_id")
-  chain      String   @map("chain") @db.VarChar(50)
-  address    String   @map("address")
-  label      String?  @map("label") @db.VarChar(200)
-  verifyProof String? @map("verify_proof")
-  metadata   Json     @map("metadata") @default("{}")
-  createdAt  DateTime @map("created_at") @default(now())
-
-  identity IdentityGraph @relation(fields: [identityId], references: [id], onDelete: Cascade)
-
-  bridgeTransfersFrom BridgeTransfer[] @relation("BridgeTransferFromAddress")
-  bridgeTransfersTo   BridgeTransfer[] @relation("BridgeTransferToAddress")
-
-  @@unique([chain, address], map: "chain_address")
-  @@index([identityId])
-  @@map("chain_addresses")
-}
-
-model IdentityLink {
-  id               String   @id @default(cuid()) @map("id")
-  sourceIdentityId String   @map("source_identity_id")
-  targetIdentityId String   @map("target_identity_id")
-  linkType         String   @map("link_type") @default("same-user") @db.VarChar(50)
-  confidence       Float    @map("confidence") @default(1.0)
-  evidence         Json     @map("evidence") @default("[]")
-  createdAt        DateTime @map("created_at") @default(now())
-  updatedAt        DateTime @map("updated_at") @updatedAt
-
-  sourceIdentity IdentityGraph @relation("IdentityLinkSource", fields: [sourceIdentityId], references: [id], onDelete: Cascade)
-  targetIdentity IdentityGraph @relation("IdentityLinkTarget", fields: [targetIdentityId], references: [id], onDelete: Cascade)
-
-  @@unique([sourceIdentityId, targetIdentityId])
-  @@index([sourceIdentityId])
-  @@index([targetIdentityId])
-  @@map("identity_links")
-}
-
-model BridgeTransfer {
-  id             String    @id @default(cuid()) @map("id")
-  fromChain      String    @map("from_chain") @db.VarChar(50)
-  toChain        String    @map("to_chain") @db.VarChar(50)
-  fromAddress    String    @map("from_address")
-  toAddress      String    @map("to_address")
-  asset          String    @map("asset") @db.VarChar(100)
-  amount         String    @map("amount")
-  bridgeProtocol String?   @map("bridge_protocol") @db.VarChar(100)
-  txHashSource   String?   @map("tx_hash_source")
-  txHashDest     String?   @map("tx_hash_dest")
-  status         String    @map("status") @default("pending") @db.VarChar(20)
-  timestamp      DateTime  @map("timestamp")
-  metadata       Json      @map("metadata") @default("{}")
-  fromAddressId  String?   @map("from_address_id")
-  toAddressId    String?   @map("to_address_id")
-  createdAt      DateTime  @map("created_at") @default(now())
-
-  fromChainAddress ChainAddress? @relation("BridgeTransferFromAddress", fields: [fromAddressId], references: [id])
-  toChainAddress   ChainAddress? @relation("BridgeTransferToAddress", fields: [toAddressId], references: [id])
-
-  @@index([fromAddress])
-  @@index([toAddress])
-  @@index([fromChain, toChain])
-  @@index([status])
-  @@index([timestamp(sort: Desc)])
-  @@index([fromAddressId])
-  @@index([toAddressId])
-  @@map("bridge_transfers")
-}
-
-// ── Audit bot channel subscriptions ──────────────────────────────────────────
-
-model AuditSubscription {
-  id              String   @id @default(cuid()) @map("id")
-  contractAddress String   @map("contract_address")
-  userId          String   @map("user_id")
-  alertTypes      String[] @map("alert_types")
-  threshold       Int      @map("threshold") @default(10)
-  cooldownMinutes Int      @map("cooldown_minutes") @default(60)
-  slackWebhookUrl String?  @map("slack_webhook_url")
-  slackChannel    String?  @map("slack_channel") @db.VarChar(200)
-  webhookUrl      String?  @map("webhook_url")
-  isActive        Boolean  @map("is_active") @default(true)
-  createdAt       DateTime @map("created_at") @default(now())
-  updatedAt       DateTime @map("updated_at") @updatedAt
-
-  @@index([contractAddress, userId])
-  @@index([isActive])
-  @@index([userId])
-  @@map("audit_subscriptions")
 }

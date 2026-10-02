@@ -68,8 +68,12 @@ const SUCCESS_SIMULATION_RESULT = {
     memBytes: '50000',
   },
   minResourceFee: '1000000',
+  // The SDK parses `transactionData` into a SorobanDataBuilder, so the handler
+  // calls `.build().toXDR('base64')` — mirror that shape here.
   transactionData: {
-    toXDR: vi.fn().mockReturnValue('AAAAAgAAAABhZf7...'),
+    build: vi.fn().mockReturnValue({
+      toXDR: vi.fn().mockReturnValue('AAAAAgAAAABhZf7...'),
+    }),
   },
   result: {
     retval: {
@@ -87,7 +91,9 @@ const RESTORE_SIMULATION_RESULT = {
   },
   minResourceFee: '500000',
   transactionData: {
-    toXDR: vi.fn().mockReturnValue('AAAAAgAAAABhZf7...'),
+    build: vi.fn().mockReturnValue({
+      toXDR: vi.fn().mockReturnValue('AAAAAgAAAABhZf7...'),
+    }),
   },
   result: {
     retval: null,

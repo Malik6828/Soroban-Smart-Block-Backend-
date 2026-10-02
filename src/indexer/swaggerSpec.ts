@@ -2443,7 +2443,7 @@ function buildSwaggerSpec(): Record<string, any> {
       `[swagger] Whole-tree spec parse failed (${(wholeErr as Error).message}); isolating per file…\n`,
     );
     const skipped: string[] = [];
-    for (const file of expandFilePatterns(options.apis ?? [])) {
+    for (const file of expandFilePatterns([...(options.apis ?? [])])) {
       try {
         const partial = swaggerJsdoc({ ...options, apis: [file] }) as Record<string, any>;
         mergeSpec(base, partial);

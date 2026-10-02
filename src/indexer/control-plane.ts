@@ -5,7 +5,7 @@ import { getAdaptivePollingService } from './adaptive-polling';
 import { getPredictiveModelService } from './predictive-model';
 import { getGracefulDegradationService, LoadLevel } from './graceful-degradation';
 import { getNATSQueueService } from './nats-queue';
-import { db } from '../db';
+import { rawQuery } from '../db/raw';
 
 /**
  * Control Plane API
@@ -32,7 +32,7 @@ router.get(
       const queueDepths = await natsQueue.getAllQueueDepths();
 
       // Get metrics from database
-      const metricsResult = await db.query(`
+      const metricsResult = await rawQuery(`
       SELECT 
         (SELECT COUNT(*) FROM ledger_gap) as ledgers_behind,
         (SELECT value FROM indexer_state WHERE key = 'processing_rate') as processing_rate,
@@ -219,7 +219,7 @@ router.get(
       const recentPredictions = modelService.getRecentPredictions();
 
       // Get prediction history from database
-      const historyResult = await db.query(`
+      const historyResult = await rawQuery(`
       SELECT 
         timestamp,
         horizon_minutes,
@@ -258,7 +258,7 @@ router.get(
   '/cost-analytics',
   asyncHandler(async (req: Request, res: Response) => {
     try {
-      const result = await db.query(`
+      const result = await rawQuery(`
       SELECT 
         AVG(processing_duration_ms) as avg_duration,
         COUNT(*) as ledgers_processed,

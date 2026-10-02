@@ -42,16 +42,17 @@ import type { CacheBackend } from './container';
  * Returns an object with common Prisma operations stubbed.
  */
 export function createMockPrismaClient(): Partial<PrismaClient> {
-  return {
+  const mock: Partial<PrismaClient> = {
     $connect: async () => {},
     $disconnect: async () => {},
-    $transaction: async (fn: any) => {
+    $transaction: async (fn: unknown) => {
       if (typeof fn === 'function') {
-        return fn(this);
+        return fn(mock);
       }
       return fn;
     },
   };
+  return mock;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

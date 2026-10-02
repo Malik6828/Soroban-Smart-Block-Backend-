@@ -13,7 +13,10 @@ describe('SDK example apps', () => {
   it('bot answers commands and prints usage', async () => {
     const { client, fetcher } = clientReturning({ score: 80 });
     expect(await handleCommand(client, 'score GABC')).toContain('80');
-    expect(fetcher).toHaveBeenCalledWith('http://x/api/v1/reputation/score/GABC', expect.anything());
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://x/api/v1/reputation/score/GABC',
+      expect.anything(),
+    );
     expect(await handleCommand(client, 'nope')).toContain('Usage');
   });
 

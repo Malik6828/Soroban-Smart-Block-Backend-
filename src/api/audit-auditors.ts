@@ -314,7 +314,9 @@ auditAuditorsRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const data = registerSchema.parse(req.body);
-      const { auditor, created } = await registerAuditor(data);
+      const { auditor, created } = await registerAuditor(
+        data as Parameters<typeof registerAuditor>[0],
+      );
 
       const status = created ? 201 : 200;
       res.status(status).json({

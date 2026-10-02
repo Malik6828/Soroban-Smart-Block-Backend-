@@ -63,7 +63,7 @@ export function auditLogMiddleware(req: Request, res: Response, next: NextFuncti
           data: {
             id: randomUUID(),
             apiKeyId: keyCtx?.id ?? null,
-            keyName: keyCtx?.keyName ?? null,
+            keyName: String(keyCtx?.keyName ?? ''),
             tier,
             ip,
             method: req.method,

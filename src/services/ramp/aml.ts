@@ -10,6 +10,7 @@
  *   velocity          – > 5 orders in a 1-hour window
  */
 
+import { Prisma } from '@prisma/client';
 import { prismaWrite, prismaRead } from '../../db';
 import { logger } from '../../logger';
 
@@ -186,7 +187,7 @@ async function createFlag(opts: {
         flagType: opts.flagType,
         severity: opts.severity,
         description: opts.description,
-        metadata: opts.metadata,
+        metadata: opts.metadata as Prisma.InputJsonValue,
       },
     });
     logger.warn('[ramp-aml] flag raised', {

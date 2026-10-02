@@ -110,6 +110,21 @@ const envSchema = z.object({
   // GET /search/suggest — per-source latency budget and merged-result cache TTL.
   SEARCH_SUGGEST_BUDGET_MS: z.coerce.number().int().positive().default(400),
   SEARCH_SUGGEST_CACHE_TTL_MS: z.coerce.number().int().min(0).default(10000),
+
+  // #918 — Health probe dependency probing feature flag.
+  // When true (default), /readyz probes all declared dependencies (DB, cache, RPC,
+  // indexer) before reporting ready. Set to false to make /readyz rely solely on
+  // the in-memory readiness state, which reduces probe traffic at the cost of
+  // delayed detection of dependency outages.
+  // /healthz is always process-only regardless of this flag.
+  HEALTH_PROBE_DEPENDENCIES: z
+    .union([z.boolean(), z.string()])
+    .transform((v) => v !== 'false' && v !== false)
+    .default(true),
+
+  // p99 latency ceiling (ms) enforced by the /healthz benchmark test.
+  // Requests that take longer than this trigger a CI failure.
+  HEALTHZ_LATENCY_P99_BUDGET_MS: z.coerce.number().int().positive().default(10),
 });
 
 let parsedEnv: z.infer<typeof envSchema>;
@@ -238,4 +253,8 @@ export const config = {
 
   searchSuggestBudgetMs: parsedEnv.SEARCH_SUGGEST_BUDGET_MS,
   searchSuggestCacheTtlMs: parsedEnv.SEARCH_SUGGEST_CACHE_TTL_MS,
+
+  // #918 — Health probe dependency probing feature flag.
+  healthProbeDependencies: parsedEnv.HEALTH_PROBE_DEPENDENCIES,
+  healthzLatencyP99BudgetMs: parsedEnv.HEALTHZ_LATENCY_P99_BUDGET_MS,
 } as const;

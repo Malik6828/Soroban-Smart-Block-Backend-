@@ -536,7 +536,7 @@ contractRouter.get(
         where: { address },
         select: { address: true, name: true, abi: true, isToken: true },
       }),
-      fetchContractSpec(address).catch(() => null),
+      fetchContractSpec(address).catch((): null => null),
     ]);
 
     if (!contract) return res.status(404).json({ error: 'Contract not found' });

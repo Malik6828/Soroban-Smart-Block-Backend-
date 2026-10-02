@@ -158,7 +158,7 @@ agentRouter.post(
       config: data.config,
       permissions: data.permissions,
       resourceLimits: data.resourceLimits,
-    });
+    } as Parameters<typeof marketplace.deployFromTemplate>[0]);
     res.status(201).json(agent);
   }),
 );
@@ -218,7 +218,11 @@ agentRouter.patch(
   requireAuth,
   asyncHandler(async (req: Request, res: Response) => {
     const data = updateAgentSchema.parse(req.body);
-    const agent = await marketplace.updateAgentConfig(req.params.id, req.user!.address, data);
+    const agent = await marketplace.updateAgentConfig(
+      req.params.id,
+      req.user!.address,
+      data as Parameters<typeof marketplace.updateAgentConfig>[2],
+    );
     res.json(agent);
   }),
 );

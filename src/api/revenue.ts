@@ -565,7 +565,7 @@ revenueRouter.patch(
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const alert = await prismaWrite.revenueAlert.update({
-        where: { id: req.params.id },
+        where: { id: Number(req.params.id) },
         data: { acknowledged: true },
       });
       res.json(alert);

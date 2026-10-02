@@ -25,7 +25,7 @@ let timer: ReturnType<typeof setInterval> | null = null;
 
 export function scheduleSettlementCompactor(): void {
   if (timer) return;
-  logger.info('[compactor] settlement compactor scheduled every', INTERVAL_MS, 'ms');
+  logger.info(`[compactor] settlement compactor scheduled every ${INTERVAL_MS}ms`);
   // Run once immediately, then on interval
   runCompactor().catch((e) => logger.error('[compactor] run error:', e));
   timer = setInterval(() => {
@@ -100,7 +100,8 @@ export async function runCompactor(): Promise<void> {
 
     await prisma.$transaction(async (tx) => {
       await tx.settlementBatchSummary.upsert({
-        where: { contractAddress_windowKey: { contractAddress, windowKey } },
+        // windowKey is a numeric ledger bucket; the column is a string.
+        where: { contractAddress_windowKey: { contractAddress, windowKey: String(windowKey) } },
         update: {
           eventCount: batch.length,
           totalAmount: totalAmount.toString(),
@@ -112,7 +113,7 @@ export async function runCompactor(): Promise<void> {
         },
         create: {
           contractAddress,
-          windowKey,
+          windowKey: String(windowKey),
           ledgerMin,
           ledgerMax,
           windowStart,

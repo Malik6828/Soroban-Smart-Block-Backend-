@@ -56,7 +56,11 @@ function toGatewayRequest(body: z.infer<typeof QuerySchema>): GatewayRequest {
     from: body.from,
     to: body.to,
     groupBy: body.groupBy,
-    measures: body.measures,
+    measures: body.measures.map((measure) => ({
+      as: measure.as,
+      fn: measure.fn,
+      column: measure.column,
+    })),
     freshness: body.freshness,
     aggregation: body.aggregation,
     timeoutMs: body.timeoutMs,

@@ -28,6 +28,9 @@ export async function indexDocument(doc: IndexDocument): Promise<void> {
   await prismaWrite.searchDocument.upsert({
     where: { docType_docId: { docType: doc.docType, docId: doc.docId } },
     create: {
+      // SearchDocument.id has no database default; derive a stable id from the
+      // natural key so re-indexing the same document is idempotent.
+      id: `${doc.docType}:${doc.docId}`,
       docType: doc.docType,
       docId: doc.docId,
       content: doc.content,

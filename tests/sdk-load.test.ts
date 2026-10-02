@@ -145,7 +145,7 @@ describe('SDK Generation Load Tests', () => {
 
       for (let i = 0; i < iterations; i++) {
         generateAll(mockOpenAPIDoc);
-        
+
         // Force garbage collection if available
         if (global.gc) {
           global.gc();
@@ -171,7 +171,7 @@ describe('SDK Generation Load Tests', () => {
 
       const summary = metrics.getSummary();
       expect(summary.length).toBeGreaterThan(0);
-      
+
       // Memory should still be reasonable
       const memoryUsage = process.memoryUsage().heapUsed;
       expect(memoryUsage).toBeLessThan(500 * 1024 * 1024); // < 500MB
@@ -199,7 +199,7 @@ describe('SDK Generation Load Tests', () => {
       });
 
       const results = await Promise.all(workers);
-      results.forEach(workerErrors => errors.push(...workerErrors));
+      results.forEach((workerErrors) => errors.push(...workerErrors));
 
       const duration = Date.now() - startTime;
       const throughput = totalRequests / (duration / 1000); // requests per second
@@ -229,9 +229,9 @@ describe('SDK Generation Load Tests', () => {
         });
 
         await Promise.all(burstPromises);
-        
+
         if (burst < burstCount - 1) {
-          await new Promise(resolve => setTimeout(resolve, burstInterval));
+          await new Promise((resolve) => setTimeout(resolve, burstInterval));
         }
       }
 
@@ -276,7 +276,7 @@ describe('SDK Generation Load Tests', () => {
       const iterations = 100;
       const failureRate = 0.1; // 10% failure rate
       let successCount = 0;
-      let partialSuccessCount = 0;
+      const partialSuccessCount = 0;
       let failureCount = 0;
 
       for (let i = 0; i < iterations; i++) {
@@ -361,14 +361,14 @@ describe('SDK Generation Load Tests', () => {
       // Simulate overload with many concurrent requests
       const overloadRequests = 200;
       const normalRequests = 50;
-      
+
       // Overload phase
       const overloadPromises = Array.from({ length: overloadRequests }, () => {
         return generateAll(mockOpenAPIDoc);
       });
-      
+
       await Promise.all(overloadPromises);
-      
+
       // Recovery phase - should still work normally
       const recoveryErrors: Error[] = [];
       for (let i = 0; i < normalRequests; i++) {
@@ -406,7 +406,7 @@ describe('SDK Generation Load Tests', () => {
       expect(gracefulDegradation.getCircuitBreakerStatus().get('test-handler')?.open).toBe(true);
 
       // Wait for recovery
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       // Circuit breaker should be reset
       expect(gracefulDegradation.getCircuitBreakerStatus().get('test-handler')).toBeUndefined();

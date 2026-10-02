@@ -21,6 +21,7 @@ import {
   broadcastCompositionAnalyzed,
 } from '../ws/composabilityBroadcaster';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { jsonInput } from '../lib/json-input';
 
 export const composabilityRouter = Router();
 
@@ -787,7 +788,8 @@ composabilityRouter.get(
       include: { patternInstances: { take: 20, orderBy: { createdAt: 'desc' } } },
     });
     if (!pattern) return res.status(404).json({ error: 'Not found' });
-    res.json(pattern);
+    const { patternInstances, ...rest } = pattern;
+    res.json({ ...rest, instances: patternInstances });
   }),
 );
 
