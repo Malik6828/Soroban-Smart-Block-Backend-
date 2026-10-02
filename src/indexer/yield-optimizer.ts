@@ -543,7 +543,10 @@ export async function processYieldOpportunityEvent(
       )
     : (prev?.incentiveApy ?? 0);
   const total = round2(base + incentive);
-  const tvl = readStringField(decoded, ['tvl', 'total_value_locked']) ?? prev?.tvl ?? '0';
+  // Prisma stores TVL in a Float column; read it as a string first so both
+  // human-formatted and plain-numeric inputs are accepted, then persist numeric.
+  const tvl =
+    Number(readStringField(decoded, ['tvl', 'total_value_locked']) ?? prev?.tvl ?? '0') || 0;
   const lockup = readIntField(
     decoded,
     ['lockup_days', 'lockup', 'lock_period_days'],

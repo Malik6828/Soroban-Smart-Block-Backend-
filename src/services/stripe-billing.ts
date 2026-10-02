@@ -146,7 +146,9 @@ billingRouter.post(
       })
       .parse(req.body);
 
-    const session = await createCheckoutSession(body);
+    const session = await createCheckoutSession(
+      body as Parameters<typeof createCheckoutSession>[0],
+    );
     res.json(session);
   }),
 );

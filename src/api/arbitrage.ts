@@ -23,7 +23,7 @@ export const arbitrageRouter = Router();
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
-function paginate<T>(data: T[], page: number, limit: number) {
+function _paginate<T>(data: T[], page: number, limit: number) {
   const total = data.length;
   const start = (page - 1) * limit;
   return {
@@ -411,7 +411,13 @@ arbitrageRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const params = simulateSchema.parse(req.body);
-      const result = await simulateExecution(params);
+      const result = await simulateExecution({
+        opportunityId: params.opportunityId,
+        capital: params.capital,
+        capitalToken: params.capitalToken,
+        slippageTolerance: params.slippageTolerance,
+        deadlineBlocks: params.deadlineBlocks,
+      });
       res.json(result);
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors });
@@ -441,7 +447,15 @@ arbitrageRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const { route } = customRouteSchema.parse(req.body);
-      const result = await simulateCustomRoute(route);
+      const result = await simulateCustomRoute(
+        route.map((hop) => ({
+          dex: hop.dex,
+          poolId: hop.poolId,
+          action: hop.action,
+          token: hop.token,
+          amount: hop.amount,
+        })),
+      );
       res.json(result);
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors });
@@ -1179,6 +1193,7 @@ arbitrageRouter.post(
       const pool = await prismaWrite.dexPool.upsert({
         where: { contractAddress: data.contractAddress },
         create: {
+          address: data.contractAddress,
           contractAddress: data.contractAddress,
           dexName: data.name,
           poolType: data.poolType,

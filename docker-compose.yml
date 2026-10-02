@@ -21,7 +21,9 @@ x-db-healthcheck: &db-healthcheck
   retries: 5
 
 x-api-healthcheck: &api-healthcheck
-  test: ['CMD-SHELL', 'wget -qO- http://localhost:$${PORT:-3000}/health || exit 1']
+  # #918: /healthz is process-only (no DB/RPC I/O) — safe to probe every 10s.
+  # Use /readyz or /health for readiness checks from external load balancers.
+  test: ['CMD-SHELL', 'wget -qO- http://localhost:$${PORT:-3000}/healthz || exit 1']
   interval: 10s
   timeout: 5s
   retries: 5
@@ -183,7 +185,8 @@ services:
       migrate-testnet:
         condition: service_completed_successfully
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/health || exit 1']
+      # #918: /healthz is process-only (no DB/RPC) — safe Docker liveness probe.
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/healthz || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -272,7 +275,8 @@ services:
       migrate-mainnet:
         condition: service_completed_successfully
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health || exit 1']
+      # #918: /healthz is process-only (no DB/RPC) — safe Docker liveness probe.
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/healthz || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -363,7 +367,8 @@ services:
       migrate-devnet:
         condition: service_completed_successfully
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:3002/health || exit 1']
+      # #918: /healthz is process-only (no DB/RPC) — safe Docker liveness probe.
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3002/healthz || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -639,7 +644,8 @@ services:
       migrate-testnet-p2p-seed:
         condition: service_completed_successfully
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:3010/health || exit 1']
+      # #918: /healthz is process-only (no DB/RPC) — safe Docker liveness probe.
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3010/healthz || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -708,7 +714,8 @@ services:
       indexer-testnet-p2p-seed:
         condition: service_started
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:3011/health || exit 1']
+      # #918: /healthz is process-only (no DB/RPC) — safe Docker liveness probe.
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3011/healthz || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -777,7 +784,8 @@ services:
       indexer-testnet-p2p-seed:
         condition: service_started
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:3012/health || exit 1']
+      # #918: /healthz is process-only (no DB/RPC) — safe Docker liveness probe.
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3012/healthz || exit 1']
       interval: 10s
       timeout: 5s
       retries: 5

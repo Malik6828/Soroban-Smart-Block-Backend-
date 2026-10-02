@@ -8,9 +8,10 @@ export const benchmarkRouter = Router();
 
 const STROOPS_PER_XLM = 10_000_000n;
 
-function stroopsToXlm(stroops: bigint): string {
-  const whole = stroops / STROOPS_PER_XLM;
-  const frac = stroops % STROOPS_PER_XLM;
+function stroopsToXlm(stroops: number | bigint): string {
+  const value = typeof stroops === 'bigint' ? stroops : BigInt(Math.trunc(stroops));
+  const whole = value / STROOPS_PER_XLM;
+  const frac = value % STROOPS_PER_XLM;
   return `${whole}.${frac.toString().padStart(7, '0')} XLM`;
 }
 

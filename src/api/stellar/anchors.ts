@@ -54,7 +54,7 @@ anchorsRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const body = registerSchema.parse(req.body);
-      const anchor = await registerAnchor(body);
+      const anchor = await registerAnchor(body as Parameters<typeof registerAnchor>[0]);
       res.status(201).json(anchor);
     } catch (e) {
       res.status(400).json({ error: String(e) });

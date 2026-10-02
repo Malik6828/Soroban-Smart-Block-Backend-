@@ -1,5 +1,5 @@
 import { Logger } from '../logger';
-import { db } from '../db';
+import { rawQuery } from '../db/raw';
 import * as tf from '@tensorflow/tfjs-node';
 
 /**
@@ -173,7 +173,7 @@ export class PredictiveModelService {
       contractDeploymentCount,
       protocolUpgradeFlag,
       externalSignalScore,
-      holidayFlag: holidayFlag ? 1 : 0,
+      holidayFlag,
     };
   }
 
@@ -273,7 +273,7 @@ export class PredictiveModelService {
   }> {
     try {
       // Calculate RMSE from recent predictions vs actual
-      const result = await db.query(
+      const result = await rawQuery(
         `
         SELECT 
           SQRT(AVG(POWER(COALESCE(actual_throughput, 0) - predicted_throughput, 2))) as rmse,
@@ -313,7 +313,7 @@ export class PredictiveModelService {
       features.contractDeploymentCount / 100,
       features.protocolUpgradeFlag ? 1 : 0,
       features.externalSignalScore,
-      features.holidayFlag,
+      features.holidayFlag ? 1 : 0,
     ];
   }
 
@@ -422,7 +422,7 @@ export class PredictiveModelService {
    */
   private async persistPrediction(prediction: ActivityPrediction): Promise<void> {
     try {
-      await db.query(
+      await rawQuery(
         `
         INSERT INTO predictions 
           (model_id, timestamp, horizon_minutes, predicted_throughput, confidence, created_at)

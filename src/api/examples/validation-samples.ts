@@ -6,6 +6,7 @@
  */
 
 import { Router, Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import {
   validateQuery,
@@ -137,7 +138,7 @@ sampleValidationRouter.get(
     const query = (req as any).validatedQuery as z.infer<typeof cursorListSchema>;
 
     // Build WHERE clause from filters
-    const where = {
+    const where: Prisma.ContractWhereInput = {
       ...(query.search && {
         OR: [
           { name: { contains: query.search, mode: 'insensitive' } },

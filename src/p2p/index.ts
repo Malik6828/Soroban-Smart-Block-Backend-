@@ -122,7 +122,7 @@ export async function startP2pNode(): Promise<void> {
         multiaddrs: [],
         ledgerCursor: 0,
       })
-      .catch(() => undefined);
+      .catch((): undefined => undefined);
   }, cfg.heartbeatIntervalMs);
 
   markReady('p2p');

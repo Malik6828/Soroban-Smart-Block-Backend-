@@ -72,7 +72,7 @@ portfolioRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     const { holdings } = valuateSchema.parse(req.body);
 
-    const valuation = await valuatePortfolio(holdings);
+    const valuation = await valuatePortfolio(holdings as Parameters<typeof valuatePortfolio>[0]);
 
     if (valuation.breakdown.length === 0) {
       return res.status(400).json({ error: 'Could not valuate any holdings' });
@@ -91,7 +91,12 @@ portfolioRouter.post(
     const toDate = to ? new Date(to) : new Date();
     const intervalMs = interval ? parseInterval(interval) : 24 * 60 * 60 * 1000;
 
-    const history = await computePortfolioHistory(holdings, fromDate, toDate, intervalMs);
+    const history = await computePortfolioHistory(
+      holdings as Parameters<typeof computePortfolioHistory>[0],
+      fromDate,
+      toDate,
+      intervalMs,
+    );
 
     res.json({
       holdings: holdings.map((h) => h.token),

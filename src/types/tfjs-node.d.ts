@@ -5,16 +5,20 @@
  * heavyweight native binary into every install.
  */
 declare module '@tensorflow/tfjs-node' {
+  export interface History {
+    history: Record<string, number[]>;
+  }
+
   export interface LayersModel {
     predict(input: unknown): unknown;
+    compile(config: object): void;
+    fit(x: unknown, y: unknown, config?: object): Promise<History>;
     save(path: string): Promise<unknown>;
     dispose(): void;
   }
 
   export interface Sequential extends LayersModel {
     add(layer: unknown): void;
-    compile(config: object): void;
-    fit(x: unknown, y: unknown, config?: object): Promise<unknown>;
   }
 
   export function loadLayersModel(path: string): Promise<LayersModel>;
@@ -29,15 +33,23 @@ declare module '@tensorflow/tfjs-node' {
   };
 
   export const train: {
-    adam(config?: object): unknown;
+    // Accepts either a learning-rate number or a full optimizer config object.
+    adam(learningRateOrConfig?: number | object): unknown;
   };
 
+  export interface Tensor {
+    dispose(): void;
+    shape: number[];
+    dataSync(): Float32Array;
+    data(): Promise<Uint8Array | Float32Array | Int32Array>;
+  }
+
   export const tensor2d: {
-    (values: number[][], shape?: [number, number]): unknown;
+    (values: number[][], shape?: [number, number]): Tensor;
   };
 
   export const tensor3d: {
-    (values: number[][][], shape?: [number, number, number]): unknown;
+    (values: number[][][], shape?: [number, number, number]): Tensor;
   };
 
   export const reshape: {

@@ -22,7 +22,13 @@ import { tieredRateLimit } from './middleware/rateLimit';
 import { metricsMiddleware } from './middleware/metricsMiddleware';
 import { sanitizeInputs, requestSizeGuard } from './middleware/sanitize';
 import { i18nMiddleware } from './i18n';
-import { registry } from './metrics';
+import {
+  registry,
+  healthProbeRequestsTotal,
+  healthProbeDurationSeconds,
+  healthProbeRequestsOtel,
+  healthProbeDurationOtel,
+} from './metrics';
 import { replicaGuard } from './middleware/replicaGuard';
 import { coldStorageRouter } from './middleware/coldStorageRouter';
 import { networkRouter } from './middleware/networkRouter';
@@ -333,24 +339,89 @@ export function createApp(options: AppOptions): express.Express {
     }),
   );
 
+  // #918: /healthz — cheap Docker/compose liveness probe.
+  //
+  // DESIGN INTENT: This endpoint must NEVER perform I/O (no DB, Redis, or RPC
+  // calls). It checks only in-process state: event loop responsiveness and
+  // uptime. The sole question it answers is "should the container runtime
+  // restart this process?" — not "is the service fully operational?".
+  //
+  // Contract:
+  //   200: process is alive, event loop is responsive → do not restart
+  //   503: process is shutting down          → container may be replaced
+  //
+  // Use /readyz for orchestrators that need dependency health before routing
+  // traffic. Use /health or /health/detailed for human operators.
+  app.get('/healthz', (_req, res) => {
+    const t0 = performance.now();
+    const endpoint = '/healthz';
+
+    if (isShuttingDown()) {
+      const durationS = (performance.now() - t0) / 1000;
+      healthProbeRequestsTotal.inc({ endpoint, status_code: '503' });
+      healthProbeDurationSeconds.observe({ endpoint }, durationS);
+      healthProbeRequestsOtel.add(1, { endpoint, status_code: '503' });
+      healthProbeDurationOtel.record(durationS, { endpoint });
+      return res.status(503).json({
+        status: 'dead',
+        reason: 'shutting_down',
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const liveness = getLivenessStatus(serviceStartTime);
+    const durationS = (performance.now() - t0) / 1000;
+    healthProbeRequestsTotal.inc({ endpoint, status_code: '200' });
+    healthProbeDurationSeconds.observe({ endpoint }, durationS);
+    healthProbeRequestsOtel.add(1, { endpoint, status_code: '200' });
+    healthProbeDurationOtel.record(durationS, { endpoint });
+    res.json(liveness);
+  });
+
   // Liveness probe - basic check that service is alive
   app.get('/livez', (_req, res) => {
+    const t0 = performance.now();
+    const endpoint = '/livez';
+
     if (isShuttingDown()) {
+      const durationS = (performance.now() - t0) / 1000;
+      healthProbeRequestsTotal.inc({ endpoint, status_code: '503' });
+      healthProbeDurationSeconds.observe({ endpoint }, durationS);
+      healthProbeRequestsOtel.add(1, { endpoint, status_code: '503' });
+      healthProbeDurationOtel.record(durationS, { endpoint });
       return res.status(503).json({ status: 'dead', reason: 'shutting_down' });
     }
 
     const liveness = getLivenessStatus(serviceStartTime);
+    const durationS = (performance.now() - t0) / 1000;
+    healthProbeRequestsTotal.inc({ endpoint, status_code: '200' });
+    healthProbeDurationSeconds.observe({ endpoint }, durationS);
+    healthProbeRequestsOtel.add(1, { endpoint, status_code: '200' });
+    healthProbeDurationOtel.record(durationS, { endpoint });
     res.json(liveness);
   });
 
   // Readiness probe - detailed check if service can handle traffic
   app.get('/readyz', (_req, res) => {
+    const t0 = performance.now();
+    const endpoint = '/readyz';
+
     if (isShuttingDown()) {
+      const durationS = (performance.now() - t0) / 1000;
+      healthProbeRequestsTotal.inc({ endpoint, status_code: '503' });
+      healthProbeDurationSeconds.observe({ endpoint }, durationS);
+      healthProbeRequestsOtel.add(1, { endpoint, status_code: '503' });
+      healthProbeDurationOtel.record(durationS, { endpoint });
       return res.status(503).json({ status: 'not_ready', reason: 'shutting_down' });
     }
 
     const readinessStatus = getReadinessStatus();
     const statusCode = readinessStatus.status === 'ready' ? 200 : 503;
+    const durationS = (performance.now() - t0) / 1000;
+    healthProbeRequestsTotal.inc({ endpoint, status_code: String(statusCode) });
+    healthProbeDurationSeconds.observe({ endpoint }, durationS);
+    healthProbeRequestsOtel.add(1, { endpoint, status_code: String(statusCode) });
+    healthProbeDurationOtel.record(durationS, { endpoint });
 
     res.status(statusCode).json(readinessStatus);
   });

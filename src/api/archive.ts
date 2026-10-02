@@ -153,7 +153,7 @@ archiveRouter.post(
         parsed.data.transactionHash,
         parsed.data.ledger,
         new Date(parsed.data.ledgerCloseTime),
-        parsed.data.changes,
+        parsed.data.changes as Parameters<typeof captureStateChangesForTransaction>[4],
       );
       res.status(201).json({ saved });
     } catch (e) {

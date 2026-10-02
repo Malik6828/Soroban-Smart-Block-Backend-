@@ -13,6 +13,9 @@ import * as nats from 'nats';
 
 const logger = new Logger('NATSQueue');
 
+// String codec for JetStream payloads (publish expects Uint8Array).
+const sc = nats.StringCodec();
+
 export interface NATSConfig {
   servers: string[]; // ['nats://localhost:4222']
   jetstream: {
@@ -186,7 +189,7 @@ export class NATSQueueService {
     if (!this.js) throw new Error('JetStream not initialized');
 
     try {
-      const result = await this.js.publish(TOPICS.RAW_LEDGERS, JSON.stringify(message));
+      const result = await this.js.publish(TOPICS.RAW_LEDGERS, sc.encode(JSON.stringify(message)));
       return result.seq.toString();
     } catch (error) {
       logger.error('Failed to publish raw ledger', { error, ledgerId: message.ledgerId });
@@ -234,7 +237,10 @@ export class NATSQueueService {
     if (!this.js) throw new Error('JetStream not initialized');
 
     try {
-      const result = await this.js.publish(TOPICS.DECODED_TRANSACTIONS, JSON.stringify(message));
+      const result = await this.js.publish(
+        TOPICS.DECODED_TRANSACTIONS,
+        sc.encode(JSON.stringify(message)),
+      );
       return result.seq.toString();
     } catch (error) {
       logger.error('Failed to publish decoded transaction', { error, txId: message.txId });
@@ -284,7 +290,10 @@ export class NATSQueueService {
     if (!this.js) throw new Error('JetStream not initialized');
 
     try {
-      const result = await this.js.publish(TOPICS.ENRICHED_EVENTS, JSON.stringify(message));
+      const result = await this.js.publish(
+        TOPICS.ENRICHED_EVENTS,
+        sc.encode(JSON.stringify(message)),
+      );
       return result.seq.toString();
     } catch (error) {
       logger.error('Failed to publish enriched event', { error, eventId: message.eventId });

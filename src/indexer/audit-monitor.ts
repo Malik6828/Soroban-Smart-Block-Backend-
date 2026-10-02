@@ -376,31 +376,31 @@ async function runMonitorCycle(): Promise<void> {
     userSignals,
     sanctionSignals,
   ] = await Promise.all([
-    detectReentrancy().catch((e) => {
+    detectReentrancy().catch((e): DetectedSignal[] => {
       logger.warn('Reentrancy detector error', { error: String(e) });
       return [];
     }),
-    detectMevAttacks().catch((e) => {
+    detectMevAttacks().catch((e): DetectedSignal[] => {
       logger.warn('MEV detector error', { error: String(e) });
       return [];
     }),
-    detectDependencyRisk().catch((e) => {
+    detectDependencyRisk().catch((e): DetectedSignal[] => {
       logger.warn('Dependency detector error', { error: String(e) });
       return [];
     }),
-    detectAdminChanges().catch((e) => {
+    detectAdminChanges().catch((e): DetectedSignal[] => {
       logger.warn('Admin change detector error', { error: String(e) });
       return [];
     }),
-    detectTvlChanges().catch((e) => {
+    detectTvlChanges().catch((e): DetectedSignal[] => {
       logger.warn('TVL detector error', { error: String(e) });
       return [];
     }),
-    detectUserChanges().catch((e) => {
+    detectUserChanges().catch((e): DetectedSignal[] => {
       logger.warn('User change detector error', { error: String(e) });
       return [];
     }),
-    detectSanctions().catch((e) => {
+    detectSanctions().catch((e): DetectedSignal[] => {
       logger.warn('Sanctions detector error', { error: String(e) });
       return [];
     }),

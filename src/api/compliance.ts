@@ -301,13 +301,13 @@ complianceRouter.post(
         aliases: e.aliases,
         program: e.program,
         country: e.country,
-        citizenship: [],
+        citizenship: [] as string[],
         addedToListAt: new Date(),
         listVersion: new Date().toISOString().split('T')[0],
-        title: undefined,
-        birthDate: undefined,
-        placeOfBirth: undefined,
-        idDocument: undefined,
+        title: undefined as string | undefined,
+        birthDate: undefined as string | undefined,
+        placeOfBirth: undefined as string | undefined,
+        idDocument: undefined as string | undefined,
       })),
       parsed.data.listName,
     );
@@ -371,7 +371,9 @@ complianceRouter.post(
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const result = await compliance.submitTravelRule(parsed.data);
+    const result = await compliance.submitTravelRule(
+      parsed.data as Parameters<typeof compliance.submitTravelRule>[0],
+    );
     res.status(201).json(result);
   }),
 );
@@ -549,7 +551,9 @@ complianceRouter.post(
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const rule = compliance.createBlockingRule(parsed.data);
+    const rule = compliance.createBlockingRule(
+      parsed.data as Parameters<typeof compliance.createBlockingRule>[0],
+    );
     res.status(201).json(rule);
   }),
 );
@@ -634,7 +638,9 @@ complianceRouter.post(
       return res.status(400).json({ error: parsed.error.flatten() });
     }
 
-    const report = await compliance.generateSarReport(parsed.data);
+    const report = await compliance.generateSarReport(
+      parsed.data as Parameters<typeof compliance.generateSarReport>[0],
+    );
     res.status(201).json(report);
   }),
 );

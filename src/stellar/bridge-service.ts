@@ -81,7 +81,7 @@ export async function getBridgeAssetDetail(assetCode: string) {
       classic: { code: sac.assetCode, issuer: sac.assetIssuer },
       soroban: { contract: sac.sacAddress },
       bridge: { protocol: 'sac' },
-      volumeHistory: [],
+      volumeHistory: [] as Array<{ date: string; volume: string }>,
     };
   }
 

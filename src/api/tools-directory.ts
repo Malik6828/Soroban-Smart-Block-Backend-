@@ -130,9 +130,13 @@ toolsDirectoryRouter.post('/', (req: Request, res: Response) => {
   const now = new Date().toISOString();
   const entry: ToolEntry = {
     id: randomUUID(),
-    ...parsed.data,
+    name: parsed.data.name,
+    description: parsed.data.description,
+    url: parsed.data.url,
+    kind: parsed.data.kind,
     tags: [...new Set(parsed.data.tags)],
     status: 'pending',
+    submittedBy: parsed.data.submittedBy,
     createdAt: now,
     updatedAt: now,
   };

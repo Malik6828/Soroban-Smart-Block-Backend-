@@ -99,7 +99,7 @@ export class TransactionService {
     const tx = await this.repo.findByHashWithEvents(hash);
     if (!tx) return null;
 
-    const bn254GasExemption = await getBn254ExemptionByTx(hash).catch(() => null);
+    const bn254GasExemption = await getBn254ExemptionByTx(hash).catch((): null => null);
     return {
       ...tx,
       ...(bn254GasExemption ? { bn254GasExemption } : {}),

@@ -172,12 +172,9 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function toDecimalString(
-  value: string | number | Prisma.Decimal | undefined,
-  fallback = '0',
-): string {
-  if (value === undefined) return fallback;
-  return new Prisma.Decimal(value).toFixed();
+function toDecimalString(value: unknown, fallback = '0'): string {
+  if (value === undefined || value === null) return fallback;
+  return new Prisma.Decimal(String(value)).toFixed();
 }
 
 function decimalPlus(left: string, right: string): string {

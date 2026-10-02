@@ -77,7 +77,10 @@ export async function buildComplianceBundle(o: BundleOptions): Promise<Complianc
           take: o.limit,
         }),
       ]);
-      return { summary: { totalEvents: total, bothSigned, singleSigned: total - bothSigned }, records };
+      return {
+        summary: { totalEvents: total, bothSigned, singleSigned: total - bothSigned },
+        records,
+      };
     }),
     safeSection('regulatory', async () => {
       const where = range('screenedAt', o);

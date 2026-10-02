@@ -421,7 +421,7 @@ export async function processLedgerRange(
       // Decode Stage
       const stopDecodeTxTimer = indexerPipelineStageDuration.startTimer({ stage: 'decode' });
       const txResult = await getTransaction(event.transactionHash).catch(() =>
-        getTransactionFromHorizon(event.transactionHash).catch(() => null),
+        getTransactionFromHorizon(event.transactionHash).catch((): null => null),
       );
       const rawXdr = (txResult as any)?.envelopeXdr?.toXDR('base64') ?? '';
       const decoded = rawXdr

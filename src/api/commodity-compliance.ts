@@ -58,8 +58,19 @@ commodityComplianceRouter.post(
       const data = createSchema.parse(req.body);
       const record = await prisma.commodityDualSignerLog.create({
         data: {
-          ...data,
+          transactionHash: data.transactionHash,
+          commodityType: data.commodityType,
+          commodityCode: data.commodityCode,
+          contractAddress: data.contractAddress,
+          traderAddress: data.traderAddress,
+          primarySignerAddress: data.primarySignerAddress,
+          secondarySignerAddress: data.secondarySignerAddress,
+          quantity: data.quantity,
+          unit: data.unit,
+          notionalValueUsd: data.notionalValueUsd,
+          regulatoryJurisdiction: data.regulatoryJurisdiction,
           expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
+          ledgerSequence: data.ledgerSequence,
           ledgerCloseTime: new Date(data.ledgerCloseTime),
         },
       });

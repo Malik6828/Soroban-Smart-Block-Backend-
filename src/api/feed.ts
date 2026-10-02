@@ -69,7 +69,7 @@ router.post(
       const subscription = await subscriptionManager.createSubscription({
         ...validatedData,
         userId: req.headers['x-user-id'] as string, // In real implementation, extract from auth
-      });
+      } as Parameters<typeof subscriptionManager.createSubscription>[0]);
 
       res.status(201).json({
         id: subscription.id,

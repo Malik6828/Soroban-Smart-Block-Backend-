@@ -35,7 +35,7 @@ async function getContractTvl(contractAddress: string): Promise<number> {
     select: { tvl: true },
   });
   if (yieldOpp?.tvl) {
-    const v = parseFloat(yieldOpp.tvl);
+    const v = yieldOpp.tvl;
     if (!isNaN(v)) return v;
   }
 

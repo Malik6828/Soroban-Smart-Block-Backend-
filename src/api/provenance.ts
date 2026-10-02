@@ -34,7 +34,7 @@ provenanceRouter.post(
       ...body.data,
       contractAddress: req.params.address,
       attestedBy: req.actor ?? 'admin',
-    });
+    } as Parameters<typeof attest>[0]);
     res.status(201).json(record);
   },
 );

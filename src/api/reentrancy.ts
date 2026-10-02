@@ -788,7 +788,7 @@ reentrancyRouter.post(
     }
 
     const txHash = body.txHash ?? `scan_${Date.now()}`;
-    const graph = buildCallGraph(txHash, body.calls);
+    const graph = buildCallGraph(txHash, body.calls as Parameters<typeof buildCallGraph>[1]);
     const findings = detectReentrancy(txHash, graph);
 
     res.json({

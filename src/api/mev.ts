@@ -1058,7 +1058,12 @@ const patternSchema = z.object({
 mevRouter.post('/sandwich-patterns', (req: Request, res: Response) => {
   try {
     const pattern = patternSchema.parse(req.body);
-    const newPattern = { id: SANDWICH_PATTERNS.length + 1, ...pattern };
+    const newPattern = {
+      id: SANDWICH_PATTERNS.length + 1,
+      name: pattern.name,
+      description: pattern.description,
+      confidence: pattern.confidence,
+    };
     SANDWICH_PATTERNS.push(newPattern);
     res.status(201).json(newPattern);
   } catch (e) {
@@ -1728,7 +1733,19 @@ mevRouter.post(
   asyncHandler(async (req: Request, res: Response) => {
     try {
       const data = createAlertSchema.parse(req.body);
-      const alert = await prismaWrite.mevAlert.create({ data });
+      const alert = await prismaWrite.mevAlert.create({
+        data: {
+          alertType: data.alertType,
+          severity: data.severity,
+          title: data.title,
+          description: data.description,
+          txHash: data.txHash,
+          victimAddress: data.victimAddress,
+          protocolAddress: data.protocolAddress,
+          estimatedLoss: data.estimatedLoss,
+          recommendedAction: data.recommendedAction,
+        },
+      });
       res.status(201).json(alert);
     } catch (e) {
       if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors });

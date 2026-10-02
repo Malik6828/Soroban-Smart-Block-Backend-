@@ -45,9 +45,18 @@ interface Ref {
   fieldName: string;
 }
 
+interface PhantomDelegate {
+  file: string;
+  line: number;
+  column: number;
+  snippet: string;
+  delegate: string;
+}
+
 interface ValidationResult {
   phantoms: Ref[];
   validCount: number;
+  delegatePhantoms: PhantomDelegate[];
 }
 
 interface DiffReport {
@@ -124,6 +133,35 @@ const BUILTIN_SKIP = new Set([
   'aggregate',
   'groupBy',
 ]);
+
+// Prisma client members that are *not* model delegates. Any `prisma.<name>`
+// that is neither one of these nor a schema model is a phantom delegate.
+const PRISMA_CLIENT_MEMBERS = new Set([
+  '$transaction',
+  '$queryRaw',
+  '$queryRawUnsafe',
+  '$executeRaw',
+  '$executeRawUnsafe',
+  '$runCommandRaw',
+  '$connect',
+  '$disconnect',
+  '$on',
+  '$use',
+  '$extends',
+]);
+
+/**
+ * Blank out comment and string-literal *contents* (preserving length and line
+ * breaks) so a `prisma.foo` mention in prose or a log message is never
+ * mistaken for a real delegate access.
+ */
+function stripCommentsAndStrings(content: string): string {
+  return content
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .replace(/\/\/[^\n]*/g, (m) => ' '.repeat(m.length))
+    .replace(/'([^'\\\n]|\\.)*'/g, (m) => (m.length > 1 ? `'${' '.repeat(m.length - 2)}'` : m))
+    .replace(/"([^"\\\n]|\\.)*"/g, (m) => (m.length > 1 ? `"${' '.repeat(m.length - 2)}"` : m));
+}
 
 // ─── Schema parser ───────────────────────────────────────────────────────────
 
@@ -290,6 +328,51 @@ function collectTs(dir: string): string[] {
 
 // ─── Phase 2: Validator ───────────────────────────────────────────────────────
 
+/**
+ * Scan `prisma.<delegate>` accesses and flag any delegate that has no
+ * matching model in the schema (e.g. `prisma.auditSubscription` when only
+ * `TipSubscription` exists). These are invisible to the field validator
+ * because no field access can be inferred from a model that does not exist.
+ */
+export function findPhantomDelegates(
+  files: string[],
+  models: Map<string, PrismaModel>,
+): PhantomDelegate[] {
+  // Prisma exposes model `Foo` as the camelCase delegate `foo`.
+  const delegates = new Set<string>();
+  for (const name of models.keys()) {
+    delegates.add(name.charAt(0).toLowerCase() + name.slice(1));
+  }
+
+  const phantoms: PhantomDelegate[] = [];
+  const re = /\bprisma(?:Read|Write|Backfill)?\.(\$?\w+)/g;
+
+  for (const file of files) {
+    const raw = fs.readFileSync(file, 'utf-8');
+    const content = stripCommentsAndStrings(raw);
+    const lines = raw.split('\n');
+    let m: RegExpExecArray | null;
+
+    while ((m = re.exec(content)) !== null) {
+      const delegate = m[1];
+      if (delegate.startsWith('$')) continue;
+      if (PRISMA_CLIENT_MEMBERS.has(delegate)) continue;
+      if (delegates.has(delegate)) continue;
+
+      const { line, col } = posToLineCol(content, m.index);
+      phantoms.push({
+        file,
+        line,
+        column: col,
+        snippet: (lines[line - 1] || '').trim(),
+        delegate,
+      });
+    }
+  }
+
+  return phantoms;
+}
+
 export function runValidator(schemaPath: string, srcDir: string): ValidationResult {
   const models = parsePrismaSchema(schemaPath);
   console.log(
@@ -310,7 +393,9 @@ export function runValidator(schemaPath: string, srcDir: string): ValidationResu
     validCount += r.valid;
   }
 
-  return { phantoms, validCount };
+  const delegatePhantoms = findPhantomDelegates(files, models);
+
+  return { phantoms, validCount, delegatePhantoms };
 }
 
 // ─── Phase 3: Migration impact analysis ──────────────────────────────────────
@@ -392,22 +477,37 @@ export function runDiffAnalysis(
 // ─── Output formatters ────────────────────────────────────────────────────────
 
 function printValidationResult(result: ValidationResult): void {
-  const { phantoms, validCount } = result;
+  const { phantoms, validCount, delegatePhantoms } = result;
   console.log(`✅  Valid field references found  : ${validCount}`);
 
   if (phantoms.length === 0) {
-    console.log('✅  No phantom Prisma field references detected.\n');
-    process.exit(0);
+    console.log('✅  No phantom Prisma field references detected.');
+  } else {
+    console.error(`\n❌  ${phantoms.length} phantom field reference(s) detected:\n`);
+    for (const r of phantoms) {
+      const rel = path.relative(process.cwd(), r.file);
+      console.error(`  ${rel}:${r.line}:${r.column}`);
+      console.error(`    model  → ${r.modelName}`);
+      console.error(`    field  → ${r.fieldName}  (not in schema)`);
+      console.error(`    source → ${r.snippet}\n`);
+    }
   }
 
-  console.error(`\n❌  ${phantoms.length} phantom field reference(s) detected:\n`);
-  for (const r of phantoms) {
-    const rel = path.relative(process.cwd(), r.file);
-    console.error(`  ${rel}:${r.line}:${r.column}`);
-    console.error(`    model  → ${r.modelName}`);
-    console.error(`    field  → ${r.fieldName}  (not in schema)`);
-    console.error(`    source → ${r.snippet}\n`);
+  if (delegatePhantoms.length === 0) {
+    console.log('✅  No phantom Prisma model/delegate references detected.\n');
+  } else {
+    console.error(
+      `\n❌  ${delegatePhantoms.length} phantom model/delegate reference(s) detected:\n`,
+    );
+    for (const r of delegatePhantoms) {
+      const rel = path.relative(process.cwd(), r.file);
+      console.error(`  ${rel}:${r.line}:${r.column}`);
+      console.error(`    delegate → prisma.${r.delegate}  (no matching model in schema)`);
+      console.error(`    source   → ${r.snippet}\n`);
+    }
   }
+
+  if (phantoms.length === 0 && delegatePhantoms.length === 0) process.exit(0);
   process.exit(1);
 }
 
